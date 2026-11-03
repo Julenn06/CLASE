@@ -15,6 +15,8 @@ import com.julen.clases.data.Holiday
 import com.julen.clases.data.NowStatus
 import com.julen.clases.data.PeriodProgress
 import com.julen.clases.data.RiskLevel
+import com.julen.clases.data.ScheduleConfig
+import com.julen.clases.data.Subject
 import com.julen.clases.data.SubjectAttendance
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.TardyResult
@@ -47,6 +49,7 @@ data class UiState(
     val holidays: List<Holiday> = emptyList(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val userName: String = "",
+    val schedule: ScheduleConfig = ScheduleConfig.DEFAULT,
     val onboarded: Boolean = true,
 ) {
     val todayUtc: Long get() = AttendanceMath.todayUtc(nowMillis)
@@ -99,6 +102,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun buildState(): UiState {
+        // El horario activo se recarga siempre (puede cambiar al editarlo, importar o borrar datos).
+        val schedule = repo.getSchedule() ?: ScheduleConfig.DEFAULT
+        Timetable.config = schedule
         val now = System.currentTimeMillis()
         val cal = Calendar.getInstance().apply { timeInMillis = now }
         val weekday = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
@@ -139,6 +145,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             holidays = holidays,
             themeMode = repo.getThemeMode(),
             userName = repo.getUserName(),
+            schedule = schedule,
             onboarded = repo.isOnboarded(),
         )
     }
@@ -162,6 +169,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun savePeriod(startUtc: Long, endUtc: Long) = update { savePeriod(startUtc, endUtc) }
+
+    // ---------- Horario y asignaturas ----------
+
+    fun setScheduleCell(day: Int, classIndex: Int, subject: String?) = update {
+        saveSchedule(Timetable.config.withCell(day, classIndex, subject))
+    }
+
+    fun saveSubject(subject: Subject) = update { saveSchedule(Timetable.config.upsertSubject(subject)) }
+
+    fun deleteSubject(code: String) = update { saveSchedule(Timetable.config.removeSubject(code)) }
+
+    fun resetSchedule() = update { resetSchedule() }
+
+    fun restoreSchedule(config: ScheduleConfig) = update { saveSchedule(config) }
 
     // ---------- Festivos ----------
 
@@ -187,6 +208,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         saveTasks(getTasks() + Task(System.currentTimeMillis(), subject, title.trim(), dueUtc, kind = kind))
     }
 
+    fun updateTask(task: Task) = update { saveTasks(getTasks().map { if (it.id == task.id) task else it }) }
+
     fun toggleTask(id: Long) = update {
         saveTasks(getTasks().map { if (it.id == id) it.copy(done = !it.done) else it })
     }
@@ -205,6 +228,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun addGrade(subject: String, title: String, score: Float, weight: Float, dateUtc: Long?) = update {
         saveGrades(getGrades() + Grade(System.currentTimeMillis(), subject, title.trim(), score, weight, dateUtc))
     }
+
+    fun updateGrade(grade: Grade) = update { saveGrades(getGrades().map { if (it.id == grade.id) grade else it }) }
 
     fun deleteGrade(id: Long) = update { saveGrades(getGrades().filterNot { it.id == id }) }
 

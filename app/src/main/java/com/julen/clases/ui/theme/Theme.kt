@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.julen.clases.R
 import com.julen.clases.data.RiskLevel
+import com.julen.clases.data.Subjects
 import com.julen.clases.data.ThemeMode
 
 /** Plus Jakarta Sans (SIL Open Font License, ver licenses/PlusJakartaSans-OFL.txt). */
@@ -173,25 +174,34 @@ fun gradeColor(score: Float?): Color = when {
     else -> AppColors.Safe
 }
 
-private val SubjectPalette = mapOf(
-    "SI" to (Color(0xFFE11D48) to Color(0xFFFB7185)),
-    "SGE" to (Color(0xFF0D9488) to Color(0xFF2DD4BF)),
-    "DI" to (Color(0xFF16A34A) to Color(0xFF4ADE80)),
-    "AD" to (Color(0xFFEA580C) to Color(0xFFFB923C)),
-    "PSP" to (Color(0xFF9333EA) to Color(0xFFC084FC)),
-    "PMDM" to (Color(0xFF2563EB) to Color(0xFF60A5FA)),
-    "IPEII" to (Color(0xFFCA8A04) to Color(0xFFFACC15)),
-    "OP1" to (Color(0xFF0891B2) to Color(0xFF22D3EE)),
-    "OP2" to (Color(0xFFDB2777) to Color(0xFFF472B6)),
+/** Paleta de colores de asignatura (tono para tema claro, tono para tema oscuro). */
+val SubjectPalette: List<Pair<Color, Color>> = listOf(
+    Color(0xFFE11D48) to Color(0xFFFB7185), // rosa
+    Color(0xFF0D9488) to Color(0xFF2DD4BF), // turquesa
+    Color(0xFF16A34A) to Color(0xFF4ADE80), // verde
+    Color(0xFFEA580C) to Color(0xFFFB923C), // naranja
+    Color(0xFF9333EA) to Color(0xFFC084FC), // violeta
+    Color(0xFF2563EB) to Color(0xFF60A5FA), // azul
+    Color(0xFFCA8A04) to Color(0xFFFACC15), // amarillo
+    Color(0xFF0891B2) to Color(0xFF22D3EE), // cian
+    Color(0xFFDB2777) to Color(0xFFF472B6), // magenta
+    Color(0xFF4F46E5) to Color(0xFF818CF8), // índigo
+    Color(0xFF65A30D) to Color(0xFFA3E635), // lima
+    Color(0xFF78716C) to Color(0xFFD6D3D1), // piedra
 )
+
+private fun paletteFor(code: String?): Pair<Color, Color>? {
+    val subject = Subjects.byCode(code) ?: return null
+    return SubjectPalette[subject.colorIndex.mod(SubjectPalette.size)]
+}
 
 /** Color identificativo de cada asignatura, ajustado al tema claro u oscuro. */
 @Composable
 @ReadOnlyComposable
 fun subjectColor(code: String?): Color {
-    val pair = SubjectPalette[code] ?: return MaterialTheme.colorScheme.onSurfaceVariant
+    val pair = paletteFor(code) ?: return MaterialTheme.colorScheme.onSurfaceVariant
     return if (isDark()) pair.second else pair.first
 }
 
 /** Color base (tono claro) de la asignatura, para degradados. */
-fun subjectBaseColor(code: String?): Color = SubjectPalette[code]?.first ?: Color(0xFF64748B)
+fun subjectBaseColor(code: String?): Color = paletteFor(code)?.first ?: Color(0xFF64748B)

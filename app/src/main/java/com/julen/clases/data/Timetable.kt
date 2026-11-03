@@ -1,29 +1,72 @@
 package com.julen.clases.data
 
 /**
- * Única fuente de verdad del curso: asignaturas, franjas horarias y horario semanal.
- * Si cambia el horario, solo hay que tocar este archivo; las horas semanales de cada
- * asignatura (para el cálculo de faltas) se derivan automáticamente.
+ * Asignaturas, franjas horarias y horario semanal.
+ *
+ * El horario es editable desde la app: la configuración activa vive en [Timetable.config]
+ * (la carga y guarda el repositorio). Las horas semanales de cada asignatura, usadas en el
+ * cálculo de faltas, se derivan siempre del horario.
  */
 
-data class Subject(val code: String, val name: String)
+/** [colorIndex] apunta a la paleta de colores de asignatura de la interfaz. */
+data class Subject(val code: String, val name: String, val colorIndex: Int = 0)
 
-object Subjects {
-    val all = listOf(
-        Subject("SI", "Sistemas Informáticos"),
-        Subject("SGE", "Sistemas de Gestión Empresarial"),
-        Subject("DI", "Desarrollo de Interfaces"),
-        Subject("AD", "Acceso a Datos"),
-        Subject("PSP", "Programación de Servicios y Procesos"),
-        Subject("PMDM", "Programación Multimedia y Disp. Móviles"),
-        Subject("IPEII", "Itinerario para la Empleabilidad II"),
-        Subject("OP1", "Optativa 1"),
-        Subject("OP2", "Optativa 2"),
+/** Configuración del curso: asignaturas y una asignatura (o null) por franja lectiva y día. */
+data class ScheduleConfig(
+    val subjects: List<Subject>,
+    /** 5 días (lunes a viernes) × [Timetable.CLASS_SLOTS] franjas lectivas. */
+    val classes: List<List<String?>>,
+) {
+    fun withCell(day: Int, classIndex: Int, subject: String?): ScheduleConfig = copy(
+        classes = classes.mapIndexed { d, slots ->
+            if (d != day) slots else slots.mapIndexed { i, s -> if (i == classIndex) subject else s }
+        },
     )
 
-    val codes: List<String> = all.map { it.code }
+    fun upsertSubject(subject: Subject): ScheduleConfig = copy(
+        subjects = if (subjects.any { it.code == subject.code }) {
+            subjects.map { if (it.code == subject.code) subject else it }
+        } else {
+            subjects + subject
+        },
+    )
 
-    fun byCode(code: String): Subject? = all.firstOrNull { it.code == code }
+    /** Elimina la asignatura y deja libres sus horas. */
+    fun removeSubject(code: String): ScheduleConfig = copy(
+        subjects = subjects.filterNot { it.code == code },
+        classes = classes.map { slots -> slots.map { if (it == code) null else it } },
+    )
+
+    companion object {
+        val DEFAULT = ScheduleConfig(
+            subjects = listOf(
+                Subject("SI", "Sistemas Informáticos", 0),
+                Subject("SGE", "Sistemas de Gestión Empresarial", 1),
+                Subject("DI", "Desarrollo de Interfaces", 2),
+                Subject("AD", "Acceso a Datos", 3),
+                Subject("PSP", "Programación de Servicios y Procesos", 4),
+                Subject("PMDM", "Programación Multimedia y Disp. Móviles", 5),
+                Subject("IPEII", "Itinerario para la Empleabilidad II", 6),
+                Subject("OP1", "Optativa 1", 7),
+                Subject("OP2", "Optativa 2", 8),
+            ),
+            classes = listOf(
+                listOf("OP1", "OP1", "IPEII", "IPEII", "SI", "SI"),
+                listOf("PMDM", "PMDM", "PMDM", "DI", "DI", "DI"),
+                listOf("AD", "AD", "OP2", "OP2", "DI", "DI"),
+                listOf("AD", "AD", "IPEII", "SI", "SI", "SI"),
+                listOf("PSP", "PSP", "PSP", "SGE", "SGE", "SGE"),
+            ),
+        )
+    }
+}
+
+object Subjects {
+    val all: List<Subject> get() = Timetable.config.subjects
+
+    val codes: List<String> get() = all.map { it.code }
+
+    fun byCode(code: String?): Subject? = all.firstOrNull { it.code == code }
 
     fun nameOf(code: String): String = byCode(code)?.name ?: code
 }
@@ -40,6 +83,9 @@ data class Block(
 ) {
     val durationMinutes: Int get() = end - start
     val label: String get() = "${formatMinutes(start)} – ${formatMinutes(end)}"
+
+    /** Hora libre (sin asignatura) que no es el recreo. */
+    val isFree: Boolean get() = !isBreak && subject == null
 }
 
 fun formatMinutes(minutes: Int): String = "%d:%02d".format(minutes / 60, minutes % 60)
@@ -55,6 +101,13 @@ sealed interface NowStatus {
 }
 
 object Timetable {
+    const val DAYS = 5
+    const val CLASS_SLOTS = 6
+
+    /** Configuración activa (asignaturas y horario). */
+    @Volatile
+    var config: ScheduleConfig = ScheduleConfig.DEFAULT
+
     val dayNames = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes")
     val dayShortNames = listOf("L", "M", "X", "J", "V")
 
@@ -68,26 +121,25 @@ object Timetable {
         TimeSlot(13 * 60 + 30, 14 * 60 + 30),
     )
 
-    /** Una entrada por franja lectiva (sin el recreo), de lunes (0) a viernes (4). */
-    private val classes: List<List<String>> = listOf(
-        listOf("OP1", "OP1", "IPEII", "IPEII", "SI", "SI"),
-        listOf("PMDM", "PMDM", "PMDM", "DI", "DI", "DI"),
-        listOf("AD", "AD", "OP2", "OP2", "DI", "DI"),
-        listOf("AD", "AD", "IPEII", "SI", "SI", "SI"),
-        listOf("PSP", "PSP", "PSP", "SGE", "SGE", "SGE"),
-    )
-
-    /** Asignatura en la franja [slotIndex] del día [day] (0 = lunes), o null si es recreo. */
-    fun subjectAt(day: Int, slotIndex: Int): String? {
+    /** Índice de franja lectiva (sin contar el recreo) de la franja [slotIndex], o null si es el recreo. */
+    fun classIndexOf(slotIndex: Int): Int? {
         val slot = slots.getOrNull(slotIndex) ?: return null
         if (slot.isBreak) return null
-        val classIndex = slots.take(slotIndex).count { !it.isBreak }
-        return classes.getOrNull(day)?.getOrNull(classIndex)
+        return slots.take(slotIndex).count { !it.isBreak }
     }
 
-    /** Bloques del día con las clases consecutivas de la misma asignatura unidas. */
+    /** Asignatura en la franja [slotIndex] del día [day] (0 = lunes), o null si es recreo u hora libre. */
+    fun subjectAt(day: Int, slotIndex: Int): String? {
+        val classIndex = classIndexOf(slotIndex) ?: return null
+        return config.classes.getOrNull(day)?.getOrNull(classIndex)
+    }
+
+    /**
+     * Bloques del día con las clases consecutivas de la misma asignatura unidas.
+     * Las horas libres al principio o al final del día se omiten.
+     */
     fun blocksFor(day: Int): List<Block> {
-        if (day !in classes.indices) return emptyList()
+        if (day !in 0 until DAYS) return emptyList()
         val result = mutableListOf<Block>()
         slots.forEachIndexed { index, slot ->
             val subject = subjectAt(day, index)
@@ -98,29 +150,37 @@ object Timetable {
                 result += Block(subject, slot.start, slot.end, slot.isBreak)
             }
         }
-        return result
+        val firstClass = result.indexOfFirst { it.subject != null }
+        if (firstClass < 0) return emptyList()
+        val lastClass = result.indexOfLast { it.subject != null }
+        return result.subList(firstClass, lastClass + 1).toList()
     }
 
     /** Horas lectivas de [subject] en el día de la semana [day]. */
-    fun hoursOn(day: Int, subject: String): Int = classes.getOrNull(day)?.count { it == subject } ?: 0
+    fun hoursOn(day: Int, subject: String): Int = config.classes.getOrNull(day)?.count { it == subject } ?: 0
 
-    fun weeklyHours(subject: String): Int = classes.indices.sumOf { hoursOn(it, subject) }
+    fun weeklyHours(subject: String): Int = (0 until DAYS).sumOf { hoursOn(it, subject) }
 
-    /** Qué está pasando en el día [day] (0 = lunes, null = fin de semana) al minuto [minuteOfDay]. */
+    /** Primer día lectivo con clases a partir de [fromDay] (dando la vuelta a la semana). */
+    private fun nextDayWithClasses(fromDay: Int): Int? =
+        (0 until DAYS).map { (fromDay + it) % DAYS }.firstOrNull { blocksFor(it).isNotEmpty() }
+
+    /** Qué está pasando en el día [day] (0 = lunes, null = fin de semana o festivo) al minuto [minuteOfDay]. */
     fun statusAt(day: Int?, minuteOfDay: Int): NowStatus {
-        if (day == null || day !in classes.indices) {
-            return NowStatus.NoClasses(NowStatus.Reason.WEEKEND, 0, blocksFor(0).firstOrNull())
+        if (day == null || day !in 0 until DAYS) {
+            val next = nextDayWithClasses(0) ?: 0
+            return NowStatus.NoClasses(NowStatus.Reason.WEEKEND, next, blocksFor(next).firstOrNull())
         }
         val blocks = blocksFor(day)
-        val first = blocks.first()
-        if (minuteOfDay < first.start) {
+        val first = blocks.firstOrNull()
+        if (first != null && minuteOfDay < first.start) {
             return NowStatus.BeforeClasses(first, first.start - minuteOfDay)
         }
         blocks.forEachIndexed { index, block ->
             if (minuteOfDay >= block.start && minuteOfDay < block.end) {
                 val next = blocks.getOrNull(index + 1)
                 val left = block.end - minuteOfDay
-                return if (block.isBreak) {
+                return if (block.isBreak || block.isFree) {
                     NowStatus.OnBreak(block, left, next)
                 } else {
                     val progress = (minuteOfDay - block.start).toFloat() / block.durationMinutes
@@ -128,7 +188,7 @@ object Timetable {
                 }
             }
         }
-        val nextDay = if (day >= classes.lastIndex) 0 else day + 1
+        val nextDay = if (day >= DAYS - 1) nextDayWithClasses(0) ?: 0 else nextDayWithClasses(day + 1) ?: 0
         return NowStatus.NoClasses(NowStatus.Reason.FINISHED, nextDay, blocksFor(nextDay).firstOrNull())
     }
 }

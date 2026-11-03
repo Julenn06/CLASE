@@ -20,13 +20,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,11 +46,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
+import com.julen.clases.data.Subject
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.Timetable
 import com.julen.clases.data.formatMinutes
 import com.julen.clases.ui.Navigator
+import com.julen.clases.ui.ShowMessage
 import com.julen.clases.ui.components.AppCard
 import com.julen.clases.ui.components.ScreenHeader
 import com.julen.clases.ui.components.SectionHeader
@@ -52,9 +63,14 @@ import com.julen.clases.ui.durationText
 import com.julen.clases.ui.theme.subjectColor
 
 @Composable
-fun ScheduleScreen(state: UiState, navigator: Navigator) {
+fun ScheduleScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, showMessage: ShowMessage) {
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var selectedDay by rememberSaveable { mutableIntStateOf(state.today ?: 0) }
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var pickerCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var editingSubject by remember { mutableStateOf<Subject?>(null) }
+    var creatingSubject by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -62,15 +78,41 @@ fun ScheduleScreen(state: UiState, navigator: Navigator) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            ScreenHeader(title = "Horario", subtitle = "Semana lectiva")
-            SegmentedControl(
-                options = listOf("Por día", "Semana"),
-                selectedIndex = mode,
-                onSelect = { mode = it },
-            )
+            ScreenHeader(title = "Horario", subtitle = if (editing) "Modo edición" else "Semana lectiva") {
+                FilledTonalIconButton(onClick = { editing = !editing }) {
+                    Icon(
+                        if (editing) Icons.Filled.Check else Icons.Filled.Edit,
+                        contentDescription = if (editing) "Terminar de editar" else "Editar horario",
+                    )
+                }
+            }
+            if (!editing) {
+                SegmentedControl(
+                    options = listOf("Por día", "Semana"),
+                    selectedIndex = mode,
+                    onSelect = { mode = it },
+                )
+            } else {
+                AppCard(color = MaterialTheme.colorScheme.primaryContainer, contentPadding = 14.dp) {
+                    Text(
+                        "Toca cualquier hora para cambiar la asignatura. Abajo puedes crear, renombrar o cambiar el color de las asignaturas.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
         }
 
-        if (mode == 0) {
+        if (editing) {
+            item {
+                WeekGrid(
+                    today = null,
+                    minuteOfDay = state.minuteOfDay,
+                    editing = true,
+                    onCellClick = { day, slotIndex, _ -> pickerCell = day to slotIndex },
+                )
+            }
+        } else if (mode == 0) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -90,7 +132,11 @@ fun ScheduleScreen(state: UiState, navigator: Navigator) {
             }
             item {
                 val blocks = Timetable.blocksFor(selectedDay)
-                AppCard(contentPadding = 14.dp) {
+                if (blocks.isEmpty()) {
+                    AppCard {
+                        Text("${Timetable.dayNames[selectedDay]} sin clases", style = MaterialTheme.typography.titleMedium)
+                    }
+                } else AppCard(contentPadding = 14.dp) {
                     Row(
                         modifier = Modifier.padding(start = 6.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -112,12 +158,28 @@ fun ScheduleScreen(state: UiState, navigator: Navigator) {
                 }
             }
         } else {
-            item { WeekGrid(today = state.today, minuteOfDay = state.minuteOfDay, onOpenSubject = navigator.openSubject) }
+            item {
+                WeekGrid(
+                    today = state.today,
+                    minuteOfDay = state.minuteOfDay,
+                    editing = false,
+                    onCellClick = { _, _, subject -> subject?.let(navigator.openSubject) },
+                )
+            }
         }
 
-        item { SectionHeader("Asignaturas") }
+        item {
+            SectionHeader(
+                "Asignaturas · ${Subjects.all.size}",
+                actionLabel = if (editing) "Añadir" else null,
+                onAction = { creatingSubject = true },
+            )
+        }
         items(Subjects.all, key = { it.code }) { subject ->
-            AppCard(onClick = { navigator.openSubject(subject.code) }, contentPadding = 14.dp) {
+            AppCard(
+                onClick = { if (editing) editingSubject = subject else navigator.openSubject(subject.code) },
+                contentPadding = 14.dp,
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SubjectBadge(subject.code, size = 42.dp)
                     Spacer(Modifier.width(14.dp))
@@ -141,10 +203,78 @@ fun ScheduleScreen(state: UiState, navigator: Navigator) {
                         style = MaterialTheme.typography.titleSmall,
                         color = subjectColor(subject.code),
                     )
-                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(
+                        if (editing) Icons.Filled.Edit else Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp).size(20.dp),
+                    )
                 }
             }
         }
+        if (editing) {
+            item {
+                TextButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Restaurar el horario original")
+                }
+            }
+        }
+    }
+
+    pickerCell?.let { (day, slotIndex) ->
+        SubjectPickerDialog(
+            day = day,
+            slotIndex = slotIndex,
+            current = Timetable.subjectAt(day, slotIndex),
+            onDismiss = { pickerCell = null },
+            onPick = { code ->
+                Timetable.classIndexOf(slotIndex)?.let { viewModel.setScheduleCell(day, it, code) }
+                pickerCell = null
+            },
+        )
+    }
+
+    if (creatingSubject || editingSubject != null) {
+        val initial = editingSubject
+        SubjectEditorDialog(
+            initial = initial,
+            onDismiss = {
+                creatingSubject = false
+                editingSubject = null
+            },
+            onSave = { subject ->
+                viewModel.saveSubject(subject)
+                showMessage(if (initial == null) "Asignatura ${subject.code} creada" else "Asignatura ${subject.code} guardada", null, null)
+                creatingSubject = false
+                editingSubject = null
+            },
+            onDelete = initial?.let { subject ->
+                {
+                    val previous = Timetable.config
+                    viewModel.deleteSubject(subject.code)
+                    editingSubject = null
+                    showMessage("Asignatura ${subject.code} eliminada", "Deshacer") { viewModel.restoreSchedule(previous) }
+                }
+            },
+        )
+    }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("¿Restaurar el horario original?") },
+            text = { Text("Se recuperan las asignaturas y horas por defecto. Tus faltas, notas y tareas no se tocan.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.resetSchedule()
+                    confirmReset = false
+                    showMessage("Horario restaurado", null, null)
+                }) { Text("Restaurar") }
+            },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancelar") } },
+        )
     }
 }
 
@@ -188,7 +318,12 @@ private fun DayChip(
 }
 
 @Composable
-private fun WeekGrid(today: Int?, minuteOfDay: Int, onOpenSubject: (String) -> Unit) {
+private fun WeekGrid(
+    today: Int?,
+    minuteOfDay: Int,
+    editing: Boolean,
+    onCellClick: (day: Int, slotIndex: Int, subject: String?) -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
     AppCard(contentPadding = 12.dp) {
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -242,13 +377,26 @@ private fun WeekGrid(today: Int?, minuteOfDay: Int, onOpenSubject: (String) -> U
                                     .weight(1f)
                                     .height(50.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (isNow) color else color.copy(alpha = 0.15f))
-                                    .clickable(enabled = subject != null) { subject?.let(onOpenSubject) },
+                                    .background(
+                                        when {
+                                            subject == null -> scheme.surfaceVariant.copy(alpha = 0.5f)
+                                            isNow -> color
+                                            else -> color.copy(alpha = 0.15f)
+                                        }
+                                    )
+                                    .then(
+                                        if (editing) Modifier.border(1.dp, scheme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp)) else Modifier
+                                    )
+                                    .clickable(enabled = editing || subject != null) { onCellClick(day, slotIndex, subject) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    subject.orEmpty(),
-                                    color = if (isNow) Color.White else color,
+                                    subject ?: if (editing) "+" else "",
+                                    color = when {
+                                        subject == null -> scheme.onSurfaceVariant
+                                        isNow -> Color.White
+                                        else -> color
+                                    },
                                     fontWeight = FontWeight.Black,
                                     fontSize = if ((subject?.length ?: 0) > 4) 10.sp else 12.sp,
                                     maxLines = 1,

@@ -115,6 +115,47 @@ class AttendanceRepository(context: Context) {
         putLong("eval_end", endUtc)
     }
 
+    // ---------- Horario y asignaturas ----------
+
+    /** Horario guardado, o null si se usa el de por defecto. */
+    fun getSchedule(): ScheduleConfig? {
+        val raw = prefs.getString(KEY_SCHEDULE, null) ?: return null
+        return runCatching {
+            val root = JSONObject(raw)
+            val subjects = root.getJSONArray("subjects").let { arr ->
+                (0 until arr.length()).map { i ->
+                    val o = arr.getJSONObject(i)
+                    Subject(o.getString("code"), o.getString("name"), o.optInt("color", 0))
+                }
+            }
+            val classes = root.getJSONArray("classes").let { days ->
+                (0 until Timetable.DAYS).map { d ->
+                    val day = days.optJSONArray(d) ?: JSONArray()
+                    (0 until Timetable.CLASS_SLOTS).map { i ->
+                        if (day.isNull(i)) null else day.optString(i).takeIf { it.isNotBlank() }
+                    }
+                }
+            }
+            ScheduleConfig(subjects, classes)
+        }.getOrNull()
+    }
+
+    fun saveSchedule(config: ScheduleConfig) {
+        val subjects = JSONArray()
+        config.subjects.forEach { s ->
+            subjects.put(JSONObject().put("code", s.code).put("name", s.name).put("color", s.colorIndex))
+        }
+        val classes = JSONArray()
+        config.classes.forEach { day ->
+            val arr = JSONArray()
+            day.forEach { arr.put(it ?: JSONObject.NULL) }
+            classes.put(arr)
+        }
+        prefs.edit { putString(KEY_SCHEDULE, JSONObject().put("subjects", subjects).put("classes", classes).toString()) }
+    }
+
+    fun resetSchedule() = prefs.edit { remove(KEY_SCHEDULE) }
+
     // ---------- Días no lectivos ----------
 
     fun getHolidays(): List<Holiday> = readArray(KEY_HOLIDAYS).mapObjects { o ->
@@ -284,6 +325,7 @@ class AttendanceRepository(context: Context) {
         private const val KEY_TASKS = "tasks"
         private const val KEY_GRADES = "grades"
         private const val KEY_HOLIDAYS = "holidays"
+        private const val KEY_SCHEDULE = "schedule"
         private const val KEY_LIMIT = "absence_limit"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_NAME = "user_name"

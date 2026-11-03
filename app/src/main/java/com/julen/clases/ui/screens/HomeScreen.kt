@@ -133,7 +133,7 @@ fun HomeScreen(
         }
 
         val day = state.today
-        if (day != null) {
+        if (day != null && Timetable.blocksFor(day).isNotEmpty()) {
             item {
                 SectionHeader(
                     "Hoy · ${Timetable.dayNames[day]}",
@@ -269,7 +269,7 @@ private fun NowCard(
             }
 
             status is NowStatus.OnBreak -> {
-                HeroLabel("Recreo", Icons.Filled.Coffee)
+                HeroLabel(if (status.block.isFree) "Hora libre" else "Recreo", Icons.Filled.Coffee)
                 HeroTitle("${status.minutesLeft} min")
                 HeroSubtitle("de descanso")
                 Spacer(Modifier.height(14.dp))
@@ -372,6 +372,7 @@ private fun HeroButton(text: String, icon: ImageVector, modifier: Modifier = Mod
 private fun nextText(next: Block?): String = when {
     next == null -> "Última clase del día"
     next.isBreak -> "Después: recreo"
+    next.isFree -> "Después: hora libre"
     else -> "Después: ${next.subject} a las ${formatMinutes(next.start)}"
 }
 
@@ -585,15 +586,15 @@ internal fun TimelineRow(block: Block, minuteOfDay: Int?, onOpenSubject: ((Strin
     ) {
         Column(modifier = Modifier.width(50.dp)) {
             Text(formatMinutes(block.start), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
-            if (!block.isBreak) {
+            if (!block.isBreak && !block.isFree) {
                 Text(formatMinutes(block.end), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        if (block.isBreak) {
+        if (block.isBreak || block.isFree) {
             Icon(Icons.Filled.Coffee, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                "Recreo · ${durationText(block.durationMinutes)}",
+                "${if (block.isBreak) "Recreo" else "Hora libre"} · ${durationText(block.durationMinutes)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),

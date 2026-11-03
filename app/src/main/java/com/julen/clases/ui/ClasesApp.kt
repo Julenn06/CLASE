@@ -156,7 +156,7 @@ fun ClasesApp(state: UiState, viewModel: AppViewModel) {
                 ) { current ->
                     when (current) {
                         Destination.HOME -> HomeScreen(state, viewModel, navigator, showMessage)
-                        Destination.SCHEDULE -> ScheduleScreen(state, navigator)
+                        Destination.SCHEDULE -> ScheduleScreen(state, viewModel, navigator, showMessage)
                         Destination.ATTENDANCE -> AttendanceScreen(state, viewModel, navigator, showMessage)
                         Destination.AGENDA -> AgendaScreen(state, viewModel, showMessage)
                         Destination.GRADES -> GradesScreen(state, viewModel, navigator, showMessage)
