@@ -70,6 +70,7 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
     var kindFilter by rememberSaveable { mutableStateOf<TaskKind?>(null) }
     var subjectFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var showEditor by remember { mutableStateOf(false) }
+    var editingTask by remember { mutableStateOf<Task?>(null) }
 
     val showDone = tab == 1
     val visible = state.tasks
@@ -151,7 +152,7 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
                     }
                 }
                 items(visible, key = { it.id }) { task ->
-                    TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) })
+                    TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) }, onClick = { editingTask = task })
                 }
             } else {
                 visible.groupBy { groupOf(it, state.todayUtc) }.toSortedMap().forEach { (group, tasks) ->
@@ -164,7 +165,7 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
                         )
                     }
                     items(tasks, key = { it.id }) { task ->
-                        TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) })
+                        TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) }, onClick = { editingTask = task })
                     }
                 }
             }
@@ -182,14 +183,24 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
         )
     }
 
-    if (showEditor) {
+    if (showEditor || editingTask != null) {
         val current = (state.nowStatus as? NowStatus.InClass)?.block?.subject
+        val editing = editingTask
         TaskEditorSheet(
-            initialSubject = subjectFilter ?: current ?: Subjects.codes.first(),
-            onDismiss = { showEditor = false },
-            onConfirm = { subject, title, due, kind ->
-                viewModel.addTask(subject, title, due, kind)
+            initial = editing,
+            initialSubject = subjectFilter ?: current ?: Subjects.codes.firstOrNull() ?: "",
+            onDismiss = {
                 showEditor = false
+                editingTask = null
+            },
+            onConfirm = { subject, title, due, kind ->
+                if (editing != null) {
+                    viewModel.updateTask(editing.copy(subject = subject, title = title.trim(), dueUtc = due, kind = kind))
+                } else {
+                    viewModel.addTask(subject, title, due, kind)
+                }
+                showEditor = false
+                editingTask = null
                 showMessage("Guardado en $subject: ${title.trim()}", null, null)
             },
         )

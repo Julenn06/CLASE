@@ -1,6 +1,7 @@
 package com.julen.clases.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -120,9 +121,10 @@ internal fun TaskRow(
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     showSubject: Boolean = true,
+    onClick: (() -> Unit)? = null,
 ) {
     val color = subjectColor(task.subject)
-    AppCard(contentPadding = 6.dp) {
+    AppCard(contentPadding = 6.dp, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = task.done, onCheckedChange = { onToggle() })
             Column(modifier = Modifier.weight(1f)) {
@@ -186,11 +188,12 @@ internal fun TaskEditorSheet(
     onDismiss: () -> Unit,
     onConfirm: (subject: String, title: String, dueUtc: Long?, kind: TaskKind) -> Unit,
     lockSubject: Boolean = false,
+    initial: Task? = null,
 ) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var subject by rememberSaveable { mutableStateOf(initialSubject) }
-    var kind by rememberSaveable { mutableStateOf(TaskKind.TASK) }
-    var due by rememberSaveable { mutableStateOf<Long?>(null) }
+    var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
+    var subject by rememberSaveable { mutableStateOf(initial?.subject ?: initialSubject) }
+    var kind by rememberSaveable { mutableStateOf(initial?.kind ?: TaskKind.TASK) }
+    var due by rememberSaveable { mutableStateOf(initial?.dueUtc) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
@@ -206,7 +209,7 @@ internal fun TaskEditorSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Nueva entrada", style = MaterialTheme.typography.headlineSmall)
+            Text(if (initial == null) "Nueva entrada" else "Editar", style = MaterialTheme.typography.headlineSmall)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TaskKind.entries.forEach { option ->
@@ -292,12 +295,14 @@ internal fun SubjectChips(selected: String?, onSelect: (String?) -> Unit, includ
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-internal fun GradeRow(grade: Grade, onDelete: () -> Unit, showSubject: Boolean = false) {
+internal fun GradeRow(grade: Grade, onDelete: () -> Unit, showSubject: Boolean = false, onClick: (() -> Unit)? = null) {
     val color = gradeColor(grade.score)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -335,12 +340,13 @@ internal fun GradeEditorDialog(
     onDismiss: () -> Unit,
     onConfirm: (subject: String, title: String, score: Float, weight: Float, dateUtc: Long?) -> Unit,
     lockSubject: Boolean = false,
+    initial: Grade? = null,
 ) {
-    var subject by rememberSaveable { mutableStateOf(initialSubject) }
-    var title by rememberSaveable { mutableStateOf("") }
-    var scoreText by rememberSaveable { mutableStateOf("") }
-    var weightText by rememberSaveable { mutableStateOf("1") }
-    var date by rememberSaveable { mutableStateOf<Long?>(null) }
+    var subject by rememberSaveable { mutableStateOf(initial?.subject ?: initialSubject) }
+    var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
+    var scoreText by rememberSaveable { mutableStateOf(initial?.let { formatScore(it.score) } ?: "") }
+    var weightText by rememberSaveable { mutableStateOf(initial?.let { formatScore(it.weight) } ?: "1") }
+    var date by rememberSaveable { mutableStateOf(initial?.dateUtc) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     val score = scoreText.replace(',', '.').toFloatOrNull()
@@ -351,7 +357,7 @@ internal fun GradeEditorDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { IconBubble(Icons.Filled.Quiz, MaterialTheme.colorScheme.primary) },
-        title = { Text("Nueva calificación") },
+        title = { Text(if (initial == null) "Nueva calificación" else "Editar calificación") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(

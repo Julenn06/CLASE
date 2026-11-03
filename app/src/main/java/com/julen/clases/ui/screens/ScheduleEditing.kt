@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -104,7 +105,7 @@ internal fun SubjectPickerDialog(
 }
 
 @Composable
-private fun PickerRow(selected: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun PickerRow(selected: Boolean, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

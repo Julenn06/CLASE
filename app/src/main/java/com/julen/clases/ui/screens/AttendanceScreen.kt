@@ -1,6 +1,7 @@
 package com.julen.clases.ui.screens
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
 import com.julen.clases.data.AttendanceMath
+import com.julen.clases.data.EntryType
+import com.julen.clases.data.Timetable
 import com.julen.clases.data.SubjectAttendance
 import com.julen.clases.data.Subjects
 import com.julen.clases.ui.Navigator
@@ -54,6 +57,7 @@ import com.julen.clases.ui.components.ProgressTrack
 import com.julen.clases.ui.components.RingProgress
 import com.julen.clases.ui.components.ScreenHeader
 import com.julen.clases.ui.components.SectionHeader
+import com.julen.clases.ui.components.SectionLabel
 import com.julen.clases.ui.components.SubjectBadge
 import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.formatPercent
@@ -61,6 +65,8 @@ import com.julen.clases.ui.plural
 import com.julen.clases.ui.theme.AppColors
 import com.julen.clases.ui.theme.color
 import com.julen.clases.ui.theme.label
+import com.julen.clases.ui.theme.subjectColor
+import java.util.Calendar
 
 @Composable
 fun AttendanceScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, showMessage: ShowMessage) {
@@ -73,6 +79,9 @@ fun AttendanceScreen(state: UiState, viewModel: AppViewModel, navigator: Navigat
     ) {
         item { ScreenHeader(title = "Asistencia", subtitle = "Límite ${state.absenceLimit.toInt()}% por asignatura") }
         item { OverviewCard(state, onConfigure = { showPeriodPicker = true }) }
+        if (state.history.any { it.type == EntryType.ABSENCE }) {
+            item { StatsCard(state) }
+        }
         item {
             SectionHeader("Asignaturas · de más a menos faltas")
         }
@@ -332,6 +341,86 @@ private fun CounterButton(
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
+        }
+    }
+}
+
+/** Estadísticas: faltas por día de la semana y por asignatura. */
+@Composable
+private fun StatsCard(state: UiState) {
+    val absences = state.history.filter { it.type == EntryType.ABSENCE }
+    val byWeekday = IntArray(5)
+    absences.forEach { entry ->
+        val cal = Calendar.getInstance().apply { timeInMillis = entry.timestamp }
+        val weekday = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        if (weekday < 5) byWeekday[weekday]++
+    }
+    val maxDay = (byWeekday.maxOrNull() ?: 0).coerceAtLeast(1)
+    val worstDay = byWeekday.indices.maxByOrNull { byWeekday[it] }
+    val bySubject = state.subjects.filter { it.absences > 0 }.sortedByDescending { it.absences }
+    val maxSubject = (bySubject.maxOfOrNull { it.absences } ?: 0).coerceAtLeast(1)
+
+    AppCard {
+        SectionLabel("Estadísticas")
+        Text("Faltas por día", style = MaterialTheme.typography.titleSmall)
+        if (worstDay != null && byWeekday[worstDay] > 0) {
+            Text(
+                "Los ${Timetable.dayNames[worstDay].lowercase()} es cuando más faltas",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            byWeekday.forEachIndexed { day, count ->
+                val fraction by animateFloatAsState(count.toFloat() / maxDay, label = "bar")
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height((80 * fraction).dp.coerceAtLeast(4.dp))
+                            .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
+                            .background(
+                                if (day == worstDay && count > 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            ),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(Timetable.dayShortNames[day], style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+        if (bySubject.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Text("Faltas por asignatura", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(8.dp))
+            bySubject.forEach { subject ->
+                Row(modifier = Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(subject.code, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(56.dp))
+                    ProgressTrack(
+                        fraction = subject.absences.toFloat() / maxSubject,
+                        color = subjectColor(subject.code),
+                        height = 10.dp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        subject.absences.toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(start = 10.dp).width(24.dp),
+                    )
+                }
+            }
         }
     }
 }

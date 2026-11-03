@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
+import com.julen.clases.data.Grade
 import com.julen.clases.data.GradeMath
 import com.julen.clases.data.GradeSummary
 import com.julen.clases.data.Subjects
@@ -53,6 +54,7 @@ import com.julen.clases.ui.theme.gradeColor
 @Composable
 fun GradesScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, showMessage: ShowMessage) {
     var showEditor by remember { mutableStateOf(false) }
+    var editingGrade by remember { mutableStateOf<Grade?>(null) }
     val withGrades = state.gradeSummaries.filter { it.average != null }
     val withoutGrades = state.gradeSummaries.filter { it.average == null }
 
@@ -98,7 +100,7 @@ fun GradesScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, 
                 item {
                     AppCard(contentPadding = 10.dp) {
                         state.grades.sortedByDescending { it.dateUtc ?: it.id }.take(6).forEach { grade ->
-                            GradeRow(grade, showSubject = true, onDelete = {
+                            GradeRow(grade, showSubject = true, onClick = { editingGrade = grade }, onDelete = {
                                 viewModel.deleteGrade(grade.id)
                                 showMessage("Nota eliminada", "Deshacer") { viewModel.restoreGrade(grade) }
                             })
@@ -120,13 +122,23 @@ fun GradesScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, 
         )
     }
 
-    if (showEditor) {
+    if (showEditor || editingGrade != null) {
+        val editing = editingGrade
         GradeEditorDialog(
-            initialSubject = Subjects.codes.first(),
-            onDismiss = { showEditor = false },
-            onConfirm = { subject, title, score, weight, date ->
-                viewModel.addGrade(subject, title, score, weight, date)
+            initial = editing,
+            initialSubject = Subjects.codes.firstOrNull() ?: "",
+            onDismiss = {
                 showEditor = false
+                editingGrade = null
+            },
+            onConfirm = { subject, title, score, weight, date ->
+                if (editing != null) {
+                    viewModel.updateGrade(editing.copy(subject = subject, title = title.trim(), score = score, weight = weight, dateUtc = date))
+                } else {
+                    viewModel.addGrade(subject, title, score, weight, date)
+                }
+                showEditor = false
+                editingGrade = null
                 showMessage("Nota guardada en $subject", null, null)
             },
         )

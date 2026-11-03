@@ -33,4 +33,22 @@ object GradeMath {
         val averages = summaries.mapNotNull { it.average }
         return if (averages.isEmpty()) null else averages.average().toFloat()
     }
+
+    /**
+     * Nota media que hace falta en las pruebas que quedan (con peso total [remainingWeight])
+     * para terminar con una media de [target]. Puede ser ≤ 0 (ya asegurado) o > 10 (imposible).
+     */
+    fun requiredScore(grades: List<Grade>, target: Float, remainingWeight: Float): Float? {
+        if (remainingWeight <= 0f) return null
+        val counted = grades.filter { it.weight > 0f }
+        val weight = counted.sumOf { it.weight.toDouble() }
+        val points = counted.sumOf { it.score.toDouble() * it.weight }
+        return ((target * (weight + remainingWeight) - points) / remainingWeight).toFloat()
+    }
+
+    /** Peso que falta si los pesos están en porcentaje (suman menos de 100), o null si no se sabe. */
+    fun remainingPercentWeight(grades: List<Grade>): Float? {
+        val total = grades.sumOf { it.weight.toDouble() }.toFloat()
+        return if (total > 1f && total < 100f) 100f - total else null
+    }
 }

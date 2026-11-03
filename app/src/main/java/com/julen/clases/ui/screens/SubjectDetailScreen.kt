@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.EventBusy
@@ -43,13 +44,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
 import com.julen.clases.data.AttendanceMath
 import com.julen.clases.data.EntryType
+import com.julen.clases.data.Grade
 import com.julen.clases.data.GradeMath
 import com.julen.clases.data.Subjects
+import com.julen.clases.data.Task
 import com.julen.clases.data.Timetable
 import com.julen.clases.data.formatMinutes
 import com.julen.clases.ui.ShowMessage
@@ -85,6 +89,8 @@ fun SubjectDetailScreen(
     val history = state.history.filter { it.subject == code }
     var showTaskEditor by remember { mutableStateOf(false) }
     var showGradeEditor by remember { mutableStateOf(false) }
+    var editingTask by remember { mutableStateOf<Task?>(null) }
+    var editingGrade by remember { mutableStateOf<Grade?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -195,8 +201,10 @@ fun SubjectDetailScreen(
                 if (grades == null || grades.grades.isEmpty()) {
                     Text("Sin notas todavía.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
+                    TargetCalculator(grades.grades)
+                    Spacer(Modifier.height(4.dp))
                     grades.grades.forEach { grade ->
-                        GradeRow(grade, onDelete = {
+                        GradeRow(grade, onClick = { editingGrade = grade }, onDelete = {
                             viewModel.deleteGrade(grade.id)
                             showMessage("Nota eliminada", "Deshacer") { viewModel.restoreGrade(grade) }
                         })
@@ -224,6 +232,7 @@ fun SubjectDetailScreen(
                         task = task,
                         todayUtc = state.todayUtc,
                         showSubject = false,
+                        onClick = { editingTask = task },
                         onToggle = { viewModel.toggleTask(task.id) },
                         onDelete = {
                             viewModel.deleteTask(task.id)
@@ -282,25 +291,45 @@ fun SubjectDetailScreen(
         item { Spacer(Modifier.navigationBarsPadding()) }
     }
 
-    if (showTaskEditor) {
+    if (showTaskEditor || editingTask != null) {
+        val editing = editingTask
         TaskEditorSheet(
+            initial = editing,
             initialSubject = code,
             lockSubject = true,
-            onDismiss = { showTaskEditor = false },
-            onConfirm = { subject, title, due, kind ->
-                viewModel.addTask(subject, title, due, kind)
+            onDismiss = {
                 showTaskEditor = false
+                editingTask = null
+            },
+            onConfirm = { subject, title, due, kind ->
+                if (editing != null) {
+                    viewModel.updateTask(editing.copy(title = title.trim(), dueUtc = due, kind = kind))
+                } else {
+                    viewModel.addTask(subject, title, due, kind)
+                }
+                showTaskEditor = false
+                editingTask = null
             },
         )
     }
-    if (showGradeEditor) {
+    if (showGradeEditor || editingGrade != null) {
+        val editing = editingGrade
         GradeEditorDialog(
+            initial = editing,
             initialSubject = code,
             lockSubject = true,
-            onDismiss = { showGradeEditor = false },
-            onConfirm = { subject, title, score, weight, date ->
-                viewModel.addGrade(subject, title, score, weight, date)
+            onDismiss = {
                 showGradeEditor = false
+                editingGrade = null
+            },
+            onConfirm = { subject, title, score, weight, date ->
+                if (editing != null) {
+                    viewModel.updateGrade(editing.copy(title = title.trim(), score = score, weight = weight, dateUtc = date))
+                } else {
+                    viewModel.addGrade(subject, title, score, weight, date)
+                }
+                showGradeEditor = false
+                editingGrade = null
             },
         )
     }
@@ -407,5 +436,56 @@ private fun NotesCard(code: String, viewModel: AppViewModel) {
                 .fillMaxWidth()
                 .heightIn(min = 140.dp),
         )
+    }
+}
+
+/** "¿Qué nota necesito?": calcula la media necesaria en lo que queda para llegar al objetivo. */
+@Composable
+private fun TargetCalculator(grades: List<com.julen.clases.data.Grade>) {
+    var targetText by rememberSaveable { mutableStateOf("5") }
+    var remainingText by rememberSaveable(grades.size) {
+        mutableStateOf(GradeMath.remainingPercentWeight(grades)?.let { formatScore(it) } ?: "")
+    }
+    val target = targetText.replace(',', '.').toFloatOrNull()
+    val remaining = remainingText.replace(',', '.').toFloatOrNull()
+    val needed = if (target != null && remaining != null) GradeMath.requiredScore(grades, target, remaining) else null
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("¿Qué nota necesito?", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+                value = targetText,
+                onValueChange = { targetText = it.take(4) },
+                label = { Text("Objetivo") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = remainingText,
+                onValueChange = { remainingText = it.take(5) },
+                label = { Text("Peso que queda") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.weight(1f),
+            )
+        }
+        val (message, color) = when {
+            needed == null -> "Indica el peso de las pruebas que faltan (mismas unidades que tus pesos)." to MaterialTheme.colorScheme.onSurfaceVariant
+            needed <= 0f -> "¡Ya lo tienes! Aunque saques un 0 llegarías a ${targetText}." to AppColors.Safe
+            needed > GradeMath.MAX_SCORE -> "Necesitarías un ${formatScore((needed * 10).toInt() / 10f)}: no es alcanzable con ese peso." to AppColors.Danger
+            else -> "Necesitas una media de ${formatScore(kotlin.math.ceil(needed * 10f) / 10f)} en lo que queda." to gradeColor(needed)
+        }
+        Text(message, style = MaterialTheme.typography.bodyMedium, color = color, fontWeight = FontWeight.SemiBold)
     }
 }

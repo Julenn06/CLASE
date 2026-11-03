@@ -30,4 +30,15 @@ class GradeMathTest {
         assertNull(summaries.first { it.subject == "SI" }.average)
         assertEquals(7f, GradeMath.overallAverage(summaries)!!, 0.001f)
     }
+
+    @Test
+    fun requiredScoreForTarget() {
+        // 4 en un 40 %: para un 5 final hace falta (5·100 − 160) / 60 = 5,67 en el 60 % restante.
+        val grades = listOf(grade("AD", 4f, 40f))
+        assertEquals(5.667f, GradeMath.requiredScore(grades, 5f, 60f)!!, 0.01f)
+        assertEquals(60f, GradeMath.remainingPercentWeight(grades)!!, 0.001f)
+        assertNull(GradeMath.requiredScore(grades, 5f, 0f))
+        // Con un 9 en el 70 % ya está aprobado aunque se saque un 0.
+        assertEquals(true, GradeMath.requiredScore(listOf(grade("AD", 9f, 70f)), 5f, 30f)!! <= 0f)
+    }
 }
