@@ -1,0 +1,191 @@
+# Publica un GitHub Release con el APK de la app.
+#
+# Cómo lanzarlo:
+#   - Subiendo una etiqueta:  git tag v2.1 && git push origin v2.1
+#   - A mano: Actions → Android Release → Run workflow (indicando la versión, p. ej. v2.1)
+#
+# Firma: si existen los secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+# ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD, se publica el APK release firmado.
+# Si no existen, se publica el APK debug (instalable, firmado con la clave de depuración)
+# y el release lo indica claramente.
+
+name: Android Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Versión a publicar (formato vX.Y o vX.Y.Z, p. ej. v2.1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Marcar como pre-release"
+        required: false
+        type: boolean
+        default: false
+
+# Por defecto, solo lectura. El job de publicación pide permiso de escritura.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: temurin
+  TERM: dumb
+
+jobs:
+  release:
+    name: Compilar y publicar release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write # crear el release (y la etiqueta, si se lanza a mano) y subir el APK
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      PRERELEASE_INPUT: ${{ inputs.prerelease || false }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Validar la versión
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+){1,2}(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error title=Versión no válida::'$TAG' no tiene el formato vX.Y o vX.Y.Z (opcionalmente con sufijo, p. ej. v2.1-beta1)."
+            exit 1
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error title=El release ya existe::Ya hay un release '$TAG'. Usa otra versión o borra el existente."
+            exit 1
+          fi
+          version="${TAG#v}"
+          prerelease="$PRERELEASE_INPUT"
+          [[ "$version" == *-* ]] && prerelease=true
+          {
+            echo "VERSION_NAME=$version"
+            echo "PRERELEASE=$prerelease"
+          } >> "$GITHUB_ENV"
+          echo "Versión: $version · pre-release: $prerelease"
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Ejecutar tests unitarios
+        run: |
+          ./gradlew :app:testDebugUnitTest || {
+            echo "::error title=Tests unitarios fallidos::No se publica el release si fallan los tests."
+            exit 1
+          }
+
+      - name: Preparar el keystore de firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::warning title=Release sin firma propia::Faltan los secrets de firma (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). Se publicará el APK debug."
+            echo "SIGNED=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/release.jks"
+          if ! echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore" || [ ! -s "$keystore" ]; then
+            echo "::error title=Keystore no válido::ANDROID_KEYSTORE_BASE64 no es un keystore en base64 válido."
+            exit 1
+          fi
+          {
+            echo "SIGNED=true"
+            echo "ANDROID_KEYSTORE_PATH=$keystore"
+          } >> "$GITHUB_ENV"
+
+      - name: Compilar APK release firmado
+        if: env.SIGNED == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:assembleRelease -PversionName="$VERSION_NAME" || {
+            echo "::error title=Fallo al compilar el release::Revisa el log. Si el error es de firma, comprueba las contraseñas y el alias de los secrets."
+            exit 1
+          }
+          apk=app/build/outputs/apk/release/app-release.apk
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          "$apksigner" verify --print-certs "$apk" || {
+            echo "::error title=APK sin firma válida::apksigner no ha podido verificar la firma del APK release."
+            exit 1
+          }
+          echo "APK_PATH=$apk" >> "$GITHUB_ENV"
+          echo "APK_NAME=Horario-de-Clases-$TAG.apk" >> "$GITHUB_ENV"
+
+      - name: Compilar APK debug (sin firma propia)
+        if: env.SIGNED != 'true'
+        run: |
+          ./gradlew :app:assembleDebug -PversionName="$VERSION_NAME" || {
+            echo "::error title=Fallo al compilar el APK::Revisa el log de Gradle."
+            exit 1
+          }
+          echo "APK_PATH=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+          echo "APK_NAME=Horario-de-Clases-$TAG-debug.apk" >> "$GITHUB_ENV"
+
+      - name: Preparar archivos del release
+        run: |
+          mkdir -p dist
+          cp "$APK_PATH" "dist/$APK_NAME"
+          (cd dist && sha256sum "$APK_NAME" > "$APK_NAME.sha256")
+          ls -l dist
+
+      - name: Publicar GitHub Release
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo "## Descarga"
+            echo
+            echo "Instala **\`$APK_NAME\`** en tu móvil (puede que tengas que permitir la instalación de apps de origen desconocido)."
+            echo
+            if [ "$SIGNED" != "true" ]; then
+              echo "> [!WARNING]"
+              echo "> Este APK está firmado con la clave de depuración porque el repositorio aún no tiene configurados los secrets de firma."
+              echo "> Cuando se publique una versión con firma propia habrá que desinstalar esta antes de instalarla."
+              echo
+            fi
+          } > "$notes"
+
+          args=(--repo "$GITHUB_REPOSITORY" --title "Horario de Clases $TAG" --notes-file "$notes" --generate-notes --target "$GITHUB_SHA")
+          [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
+
+          gh release create "$TAG" dist/* "${args[@]}" || {
+            echo "::error title=No se pudo publicar el release::Comprueba que la etiqueta '$TAG' no exista ya y que el workflow tiene permiso contents: write."
+            exit 1
+          }
+          {
+            echo "## Release publicado"
+            echo
+            echo "- Versión: \`$TAG\`"
+            echo "- APK: \`$APK_NAME\` ($([ "$SIGNED" = "true" ] && echo 'firmado con la clave del repositorio' || echo 'firmado con clave de depuración'))"
+            echo "- $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Borrar el keystore temporal
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
