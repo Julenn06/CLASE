@@ -20,14 +20,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,10 +55,15 @@ import com.julen.clases.data.formatMinutes
 import com.julen.clases.ui.Navigator
 import com.julen.clases.ui.ShowMessage
 import com.julen.clases.ui.components.AppCard
-import com.julen.clases.ui.components.ScreenHeader
-import com.julen.clases.ui.components.SectionHeader
-import com.julen.clases.ui.components.SegmentedControl
+import com.julen.clases.ui.components.AppScreen
+import com.julen.clases.ui.components.EmptyState
+import com.julen.clases.ui.components.GroupDivider
+import com.julen.clases.ui.components.GroupItem
+import com.julen.clases.ui.components.ListGroup
+import com.julen.clases.ui.components.SectionTitle
+import com.julen.clases.ui.components.Segments
 import com.julen.clases.ui.components.SubjectBadge
+import com.julen.clases.ui.components.screenPadding
 import com.julen.clases.ui.durationText
 import com.julen.clases.ui.theme.subjectColor
 
@@ -72,152 +77,131 @@ fun ScheduleScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator
     var creatingSubject by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            ScreenHeader(title = "Horario", subtitle = if (editing) "Modo edición" else "Semana lectiva") {
-                FilledTonalIconButton(onClick = { editing = !editing }) {
-                    Icon(
-                        if (editing) Icons.Filled.Check else Icons.Filled.Edit,
-                        contentDescription = if (editing) "Terminar de editar" else "Editar horario",
-                    )
-                }
-            }
-            if (!editing) {
-                SegmentedControl(
-                    options = listOf("Por día", "Semana"),
-                    selectedIndex = mode,
-                    onSelect = { mode = it },
+    AppScreen(
+        title = if (editing) "Editar horario" else "Horario",
+        actions = {
+            IconButton(onClick = { editing = !editing }) {
+                Icon(
+                    if (editing) Icons.Filled.Check else Icons.Outlined.Edit,
+                    contentDescription = if (editing) "Terminar de editar" else "Editar horario",
                 )
-            } else {
-                AppCard(color = MaterialTheme.colorScheme.primaryContainer, contentPadding = 14.dp) {
+            }
+        },
+    ) { inner ->
+        LazyColumn(contentPadding = screenPadding(inner), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item {
+                if (!editing) {
+                    Segments(options = listOf("Por día", "Semana"), selectedIndex = mode, onSelect = { mode = it })
+                } else {
                     Text(
-                        "Toca cualquier hora para cambiar la asignatura. Abajo puedes crear, renombrar o cambiar el color de las asignaturas.",
+                        "Toca cualquier hora para cambiar la asignatura. Más abajo puedes crear asignaturas o cambiar su nombre y color.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
                     )
                 }
             }
-        }
 
-        if (editing) {
-            item {
-                WeekGrid(
-                    today = null,
-                    minuteOfDay = state.minuteOfDay,
-                    editing = true,
-                    onCellClick = { day, slotIndex, _ -> pickerCell = day to slotIndex },
-                )
-            }
-        } else if (mode == 0) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Timetable.dayShortNames.forEachIndexed { index, short ->
-                        DayChip(
-                            text = short,
-                            hours = Timetable.blocksFor(index).filter { !it.isBreak }.sumOf { it.durationMinutes } / 60,
-                            selected = index == selectedDay,
-                            isToday = index == state.today,
-                            onClick = { selectedDay = index },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+            if (editing) {
+                item {
+                    WeekGrid(
+                        today = null,
+                        minuteOfDay = state.minuteOfDay,
+                        editing = true,
+                        onCellClick = { day, slotIndex, _ -> pickerCell = day to slotIndex },
+                    )
                 }
-            }
-            item {
-                val blocks = Timetable.blocksFor(selectedDay)
-                if (blocks.isEmpty()) {
-                    AppCard {
-                        Text("${Timetable.dayNames[selectedDay]} sin clases", style = MaterialTheme.typography.titleMedium)
-                    }
-                } else AppCard(contentPadding = 14.dp) {
+            } else if (mode == 0) {
+                item {
                     Row(
-                        modifier = Modifier.padding(start = 6.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(Timetable.dayNames[selectedDay], style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                        Text(
-                            "${formatMinutes(blocks.first().start)} – ${formatMinutes(blocks.last().end)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    blocks.forEach { block ->
-                        TimelineRow(
-                            block = block,
-                            minuteOfDay = if (selectedDay == state.today) state.minuteOfDay else null,
-                            onOpenSubject = navigator.openSubject,
-                        )
+                        Timetable.dayShortNames.forEachIndexed { index, short ->
+                            DayChip(
+                                text = short,
+                                hours = Timetable.blocksFor(index).filter { it.subject != null && !it.isBreak }.sumOf { it.durationMinutes } / 60,
+                                selected = index == selectedDay,
+                                isToday = index == state.today,
+                                onClick = { selectedDay = index },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
+                item {
+                    val blocks = Timetable.blocksFor(selectedDay)
+                    if (blocks.isEmpty()) {
+                        EmptyState(title = "Sin clases", message = "${Timetable.dayNames[selectedDay]} no tiene horas en el horario.")
+                    } else {
+                        Column {
+                            Text(
+                                "${Timetable.dayNames[selectedDay]} · ${formatMinutes(blocks.first().start)} – ${formatMinutes(blocks.last().end)}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
+                            )
+                            ListGroup {
+                                blocks.forEachIndexed { index, block ->
+                                    if (index > 0) GroupDivider(inset = 72.dp)
+                                    TimelineRow(
+                                        block = block,
+                                        minuteOfDay = if (selectedDay == state.today) state.minuteOfDay else null,
+                                        onOpenSubject = navigator.openSubject,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                item {
+                    WeekGrid(
+                        today = state.today,
+                        minuteOfDay = state.minuteOfDay,
+                        editing = false,
+                        onCellClick = { _, _, subject -> subject?.let(navigator.openSubject) },
+                    )
+                }
             }
-        } else {
+
             item {
-                WeekGrid(
-                    today = state.today,
-                    minuteOfDay = state.minuteOfDay,
-                    editing = false,
-                    onCellClick = { _, _, subject -> subject?.let(navigator.openSubject) },
+                SectionTitle(
+                    "Asignaturas",
+                    actionLabel = if (editing) "Añadir" else null,
+                    onAction = { creatingSubject = true },
                 )
             }
-        }
-
-        item {
-            SectionHeader(
-                "Asignaturas · ${Subjects.all.size}",
-                actionLabel = if (editing) "Añadir" else null,
-                onAction = { creatingSubject = true },
-            )
-        }
-        items(Subjects.all, key = { it.code }) { subject ->
-            AppCard(
-                onClick = { if (editing) editingSubject = subject else navigator.openSubject(subject.code) },
-                contentPadding = 14.dp,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SubjectBadge(subject.code, size = 42.dp)
-                    Spacer(Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            subject.name,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            Timetable.dayShortNames.indices
-                                .filter { Timetable.hoursOn(it, subject.code) > 0 }
-                                .joinToString(" · ") { Timetable.dayNames[it].take(3) },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            item {
+                ListGroup {
+                    Subjects.all.forEachIndexed { index, subject ->
+                        if (index > 0) GroupDivider(inset = 72.dp)
+                        GroupItem(
+                            headline = subject.name,
+                            supporting = "${Timetable.weeklyHours(subject.code)} h/semana · " +
+                                Timetable.dayShortNames.indices
+                                    .filter { Timetable.hoursOn(it, subject.code) > 0 }
+                                    .joinToString(" ") { Timetable.dayShortNames[it] },
+                            leading = { SubjectBadge(subject.code) },
+                            trailing = {
+                                Icon(
+                                    if (editing) Icons.Outlined.Edit else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            onClick = { if (editing) editingSubject = subject else navigator.openSubject(subject.code) },
                         )
                     }
-                    Text(
-                        "${Timetable.weeklyHours(subject.code)} h",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = subjectColor(subject.code),
-                    )
-                    Icon(
-                        if (editing) Icons.Filled.Edit else Icons.Filled.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 6.dp).size(20.dp),
-                    )
                 }
             }
-        }
-        if (editing) {
-            item {
-                TextButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Restaurar el horario original")
+            if (editing) {
+                item {
+                    TextButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Outlined.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Restaurar el horario original")
+                    }
                 }
             }
         }
@@ -292,27 +276,17 @@ private fun DayChip(
     val content by animateColorAsState(if (selected) scheme.onPrimary else scheme.onSurface, label = "dayText")
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(background)
-            .border(1.dp, if (selected) Color.Transparent else scheme.outlineVariant, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = content)
-        Text("$hours h", style = MaterialTheme.typography.labelSmall, color = content.copy(alpha = 0.7f))
-        Box(
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .size(5.dp)
-                .clip(RoundedCornerShape(50))
-                .background(
-                    when {
-                        !isToday -> Color.Transparent
-                        selected -> scheme.onPrimary
-                        else -> scheme.primary
-                    }
-                ),
+        Text(text, style = MaterialTheme.typography.titleMedium, color = content)
+        Text(
+            if (isToday) "hoy" else "$hours h",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isToday && !selected) scheme.primary else content.copy(alpha = 0.7f),
         )
     }
 }

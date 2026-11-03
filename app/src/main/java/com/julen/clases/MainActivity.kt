@@ -24,6 +24,8 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // La barra de navegación de la app ya da contraste; sin velo extra del sistema.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
         Notifications.createChannels(this)
         requestMaxRefreshRate()
 

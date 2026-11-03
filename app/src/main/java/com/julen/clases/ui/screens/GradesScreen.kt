@@ -1,5 +1,6 @@
 package com.julen.clases.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,15 +40,14 @@ import com.julen.clases.data.GradeSummary
 import com.julen.clases.data.Subjects
 import com.julen.clases.ui.Navigator
 import com.julen.clases.ui.ShowMessage
-import com.julen.clases.ui.components.AppCard
+import com.julen.clases.ui.components.AppScreen
 import com.julen.clases.ui.components.EmptyState
-import com.julen.clases.ui.components.GradientCard
-import com.julen.clases.ui.components.ProgressTrack
-import com.julen.clases.ui.components.RingProgress
-import com.julen.clases.ui.components.ScreenHeader
-import com.julen.clases.ui.components.SectionHeader
+import com.julen.clases.ui.components.GroupDivider
+import com.julen.clases.ui.components.ListGroup
+import com.julen.clases.ui.components.SectionTitle
 import com.julen.clases.ui.components.Sparkline
 import com.julen.clases.ui.components.SubjectBadge
+import com.julen.clases.ui.components.screenPadding
 import com.julen.clases.ui.formatScore
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.theme.AppColors
@@ -61,48 +61,57 @@ fun GradesScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, 
     val withGrades = state.gradeSummaries.filter { it.average != null }
     val withoutGrades = state.gradeSummaries.filter { it.average == null }
 
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item { ScreenHeader(title = "Notas", subtitle = "Calificaciones del curso") }
-            item { AverageHero(state) }
+    AppScreen(
+        title = "Notas",
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { showEditor = true },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("Nota") },
+            )
+        },
+    ) { inner ->
+        LazyColumn(contentPadding = screenPadding(inner, extraBottom = 96.dp)) {
+            item { AverageOverview(state) }
 
             if (state.grades.isEmpty()) {
                 item {
                     EmptyState(
                         title = "Aún no hay notas",
                         message = "Añade tus calificaciones con su peso y verás la media ponderada de cada asignatura.",
-                        icon = Icons.Filled.School,
+                        icon = Icons.Outlined.School,
                     )
                 }
             }
 
             if (withGrades.isNotEmpty()) {
-                item { SectionHeader("Por asignatura") }
-                items(withGrades.sortedByDescending { it.average }, key = { it.subject }) { summary ->
-                    SubjectGradeCard(summary, onClick = { navigator.openSubject(summary.subject) })
-                }
-            }
-
-            if (withoutGrades.isNotEmpty() && state.grades.isNotEmpty()) {
+                item { SectionTitle("Por asignatura") }
                 item {
-                    Text(
-                        "Sin notas: " + withoutGrades.joinToString(" · ") { it.subject },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                    )
+                    ListGroup {
+                        withGrades.sortedByDescending { it.average }.forEachIndexed { index, summary ->
+                            if (index > 0) GroupDivider(inset = 72.dp)
+                            SubjectGradeRow(summary, onClick = { navigator.openSubject(summary.subject) })
+                        }
+                    }
+                }
+                if (withoutGrades.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Sin notas: " + withoutGrades.joinToString(" · ") { it.subject },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+                        )
+                    }
                 }
             }
 
             if (state.grades.isNotEmpty()) {
-                item { SectionHeader("Últimas notas") }
+                item { SectionTitle("Últimas notas") }
                 item {
-                    AppCard(contentPadding = 10.dp) {
-                        state.grades.sortedByDescending { it.dateUtc ?: it.id }.take(6).forEach { grade ->
+                    ListGroup {
+                        state.grades.sortedByDescending { it.dateUtc ?: it.id }.take(8).forEachIndexed { index, grade ->
+                            if (index > 0) GroupDivider(inset = 76.dp)
                             GradeRow(grade, showSubject = true, onClick = { editingGrade = grade }, onDelete = {
                                 viewModel.deleteGrade(grade.id)
                                 showMessage("Nota eliminada", "Deshacer") { viewModel.restoreGrade(grade) }
@@ -112,17 +121,6 @@ fun GradesScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, 
                 }
             }
         }
-
-        ExtendedFloatingActionButton(
-            onClick = { showEditor = true },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text("Nota") },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp),
-        )
     }
 
     if (showEditor || editingGrade != null) {
@@ -149,65 +147,56 @@ fun GradesScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, 
 }
 
 @Composable
-private fun AverageHero(state: UiState) {
+private fun AverageOverview(state: UiState) {
     val average = state.overallAverage
     val passed = state.gradeSummaries.count { it.passed == true }
     val failed = state.gradeSummaries.count { it.passed == false }
-    val white = Color.White
-    GradientCard(colors = AppColors.CalmGradient) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RingProgress(
-                progress = (average ?: 0f) / GradeMath.MAX_SCORE,
-                color = white,
-                trackColor = white.copy(alpha = 0.2f),
-                size = 104.dp,
-                strokeWidth = 11.dp,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        average?.let { formatScore((it * 100).toInt() / 100f) } ?: "—",
-                        color = white,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Black,
-                    )
-                    Text("media", color = white.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
-                }
-            }
-            Spacer(Modifier.width(18.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("RESUMEN", color = white.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall)
-                Text(plural(state.grades.size, "nota"), color = white, style = MaterialTheme.typography.titleLarge)
-                Text("$passed aprobadas · $failed por recuperar", color = white.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
-            }
+    Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                average?.let { formatScore((it * 100).toInt() / 100f) } ?: "—",
+                style = MaterialTheme.typography.displayMedium,
+                color = if (average == null) MaterialTheme.colorScheme.onSurfaceVariant else gradeColor(average),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "de media",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
         }
+        Text(
+            "${plural(state.grades.size, "nota")} · $passed aprobadas · $failed por debajo de 5",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
 @Composable
-private fun SubjectGradeCard(summary: GradeSummary, onClick: () -> Unit) {
+private fun SubjectGradeRow(summary: GradeSummary, onClick: () -> Unit) {
     val average = summary.average ?: return
     val color = gradeColor(average)
-    AppCard(onClick = onClick, contentPadding = 16.dp) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SubjectBadge(summary.subject, size = 42.dp)
-            Spacer(Modifier.width(14.dp))
+            SubjectBadge(summary.subject)
+            Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(Subjects.nameOf(summary.subject), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(Subjects.nameOf(summary.subject), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     plural(summary.grades.size, "nota") + (summary.best?.let { " · mejor ${formatScore(it)}" } ?: ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                formatScore((average * 100).toInt() / 100f),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
-                color = color,
-            )
+            Text(formatScore((average * 100).toInt() / 100f), style = MaterialTheme.typography.titleLarge, color = color)
         }
-        Spacer(Modifier.height(12.dp))
-        ProgressTrack(fraction = average / GradeMath.MAX_SCORE, color = color, height = 6.dp)
         if (summary.grades.size >= 2) {
             Sparkline(
                 values = summary.grades.map { it.score },
@@ -215,8 +204,8 @@ private fun SubjectGradeCard(summary: GradeSummary, onClick: () -> Unit) {
                 guide = GradeMath.PASS_MARK,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(top = 10.dp),
+                    .height(44.dp)
+                    .padding(start = 56.dp, top = 10.dp),
             )
         }
     }

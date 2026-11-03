@@ -17,11 +17,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.EventNote
-import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -58,8 +58,13 @@ import com.julen.clases.ui.components.EmptyState
 import com.julen.clases.ui.components.MonthGrid
 import com.julen.clases.ui.components.WeekdayHeader
 import com.julen.clases.ui.formatDateUtc
-import com.julen.clases.ui.components.ScreenHeader
-import com.julen.clases.ui.components.SegmentedControl
+import com.julen.clases.ui.components.AppScreen
+import com.julen.clases.ui.components.GroupDivider
+import com.julen.clases.ui.components.ListGroup
+import com.julen.clases.ui.components.SectionTitle
+import com.julen.clases.ui.components.screenPadding
+import com.julen.clases.ui.components.Segments
+import com.julen.clases.ui.plural
 import com.julen.clases.ui.daysUntil
 import com.julen.clases.ui.theme.AppColors
 
@@ -105,19 +110,31 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
         showMessage("Eliminado: ${task.title}", "Deshacer") { viewModel.restoreTasks(listOf(task)) }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val taskList: @Composable (List<Task>) -> Unit = { tasks ->
+        ListGroup {
+            tasks.forEachIndexed { index, task ->
+                if (index > 0) GroupDivider(inset = 56.dp)
+                TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) }, onClick = { editingTask = task })
+            }
+        }
+    }
+
+    AppScreen(
+        title = "Agenda",
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { showEditor = true },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("Nueva") },
+            )
+        },
+    ) { inner ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = screenPadding(inner, extraBottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
-                val pending = state.pendingTasks.size
-                ScreenHeader(
-                    title = "Agenda",
-                    subtitle = if (pending == 0) "Todo al día" else "$pending pendiente${if (pending == 1) "" else "s"}",
-                )
-                SegmentedControl(
+                Segments(
                     options = listOf("Pendientes", "Hechas", "Calendario"),
                     selectedIndex = tab,
                     onSelect = { tab = it },
@@ -133,97 +150,84 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
                 }
                 val dayTasks = state.tasks.filter { it.dueUtc == selectedDay }.sortedWith(taskOrder)
                 item {
-                    Text(
-                        formatDateUtc(selectedDay, "EEEE d 'de' MMMM").capitalized() + if (dayTasks.isEmpty()) " · libre" else " · ${dayTasks.size}",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, start = 4.dp),
-                    )
+                    SectionTitle(formatDateUtc(selectedDay, "EEEE d 'de' MMMM").capitalized())
                 }
-                items(dayTasks, key = { it.id }) { task ->
-                    TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) }, onClick = { editingTask = task })
+                item {
+                    if (dayTasks.isEmpty()) {
+                        Text(
+                            "Nada apuntado para este día.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                    } else {
+                        taskList(dayTasks)
+                    }
                 }
             } else {
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item {
-                        FilterChip(selected = kindFilter == null, onClick = { kindFilter = null }, label = { Text("Todo") })
-                    }
-                    items(TaskKind.entries.toList()) { kind ->
-                        FilterChip(
-                            selected = kindFilter == kind,
-                            onClick = { kindFilter = if (kindFilter == kind) null else kind },
-                            label = { Text(kind.label) },
-                            leadingIcon = { Icon(kind.icon(), null, tint = kind.color(), modifier = Modifier.size(18.dp)) },
-                        )
-                    }
-                }
-            }
-            item { SubjectChips(selected = subjectFilter, onSelect = { subjectFilter = it }, includeAll = true) }
-
-            if (visible.isEmpty()) {
                 item {
-                    EmptyState(
-                        title = if (showDone) "Nada completado aún" else "Nada pendiente",
-                        message = if (showDone) {
-                            "Las tareas que marques como hechas aparecerán aquí."
-                        } else {
-                            "Pulsa «Nueva» para apuntar deberes, entregas o fechas de examen."
-                        },
-                        icon = if (showDone) Icons.Filled.TaskAlt else Icons.Filled.EventNote,
-                    )
-                }
-            }
-
-            if (showDone) {
-                if (visible.isNotEmpty()) {
-                    item {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "${visible.size} completadas",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(selected = kindFilter == null, onClick = { kindFilter = null }, label = { Text("Todo") })
+                        }
+                        items(TaskKind.entries.toList()) { kind ->
+                            FilterChip(
+                                selected = kindFilter == kind,
+                                onClick = { kindFilter = if (kindFilter == kind) null else kind },
+                                label = { Text(kind.label) },
+                                leadingIcon = { Icon(kind.icon(), null, tint = kind.color(), modifier = Modifier.size(18.dp)) },
                             )
-                            TextButton(onClick = {
-                                val removed = state.tasks.filter { it.done }
-                                viewModel.clearCompletedTasks()
-                                showMessage("Tareas hechas eliminadas", "Deshacer") { viewModel.restoreTasks(removed) }
-                            }) { Text("Limpiar todo") }
                         }
                     }
                 }
-                items(visible, key = { it.id }) { task ->
-                    TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) }, onClick = { editingTask = task })
-                }
-            } else {
-                visible.groupBy { groupOf(it, state.todayUtc) }.toSortedMap().forEach { (group, tasks) ->
-                    item(key = "header-${group.name}") {
-                        Text(
-                            "${group.title} · ${tasks.size}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (group == DueGroup.OVERDUE) AppColors.Danger else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                item { SubjectChips(selected = subjectFilter, onSelect = { subjectFilter = it }, includeAll = true) }
+
+                if (visible.isEmpty()) {
+                    item {
+                        EmptyState(
+                            title = if (showDone) "Nada completado aún" else "Nada pendiente",
+                            message = if (showDone) {
+                                "Las tareas que marques como hechas aparecerán aquí."
+                            } else {
+                                "Pulsa «Nueva» para apuntar deberes, entregas o fechas de examen."
+                            },
+                            icon = if (showDone) Icons.Outlined.TaskAlt else Icons.Outlined.EventNote,
                         )
                     }
-                    items(tasks, key = { it.id }) { task ->
-                        TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) }, onClick = { editingTask = task })
+                }
+
+                if (showDone) {
+                    if (visible.isNotEmpty()) {
+                        item {
+                            SectionTitle(
+                                plural(visible.size, "completada", "completadas"),
+                                actionLabel = "Limpiar todo",
+                                onAction = {
+                                    val removed = state.tasks.filter { it.done }
+                                    viewModel.clearCompletedTasks()
+                                    showMessage("Tareas hechas eliminadas", "Deshacer") { viewModel.restoreTasks(removed) }
+                                },
+                            )
+                        }
+                        item { taskList(visible) }
+                    }
+                } else {
+                    visible.groupBy { groupOf(it, state.todayUtc) }.toSortedMap().forEach { (group, tasks) ->
+                        item(key = "group-${group.name}") {
+                            Column {
+                                Text(
+                                    "${group.title} · ${tasks.size}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = if (group == DueGroup.OVERDUE) AppColors.Danger else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 12.dp, start = 4.dp, bottom = 8.dp),
+                                )
+                                taskList(tasks)
+                            }
+                        }
                     }
                 }
             }
-            }
         }
-
-        ExtendedFloatingActionButton(
-            onClick = { showEditor = true },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text("Nueva") },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp),
-        )
     }
 
     if (showEditor || editingTask != null) {

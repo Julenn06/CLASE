@@ -322,7 +322,7 @@ private fun RangeHeader(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-            .background(Brush.linearGradient(heroGradient())),
+            .background(heroGradient().first()),
     ) {
         Column(
             modifier = Modifier

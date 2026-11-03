@@ -3,40 +3,32 @@ package com.julen.clases.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BeachAccess
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Coffee
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.EventAvailable
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.TaskAlt
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,9 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -61,7 +51,6 @@ import com.julen.clases.data.Block
 import com.julen.clases.data.CalendarMath
 import com.julen.clases.data.NowStatus
 import com.julen.clases.data.Subjects
-import com.julen.clases.data.Task
 import com.julen.clases.data.TaskKind
 import com.julen.clases.data.Timetable
 import com.julen.clases.data.formatMinutes
@@ -69,17 +58,16 @@ import com.julen.clases.ui.Destination
 import com.julen.clases.ui.Navigator
 import com.julen.clases.ui.ShowMessage
 import com.julen.clases.ui.capitalized
-import com.julen.clases.ui.components.AppCard
+import com.julen.clases.ui.components.AppScreen
 import com.julen.clases.ui.components.Dot
-import com.julen.clases.ui.components.GradientCard
-import com.julen.clases.ui.components.IconBubble
+import com.julen.clases.ui.components.GroupDivider
+import com.julen.clases.ui.components.GroupItem
+import com.julen.clases.ui.components.ListGroup
 import com.julen.clases.ui.components.PeriodPickerDialog
-import com.julen.clases.ui.components.Pill
 import com.julen.clases.ui.components.ProgressTrack
-import com.julen.clases.ui.components.RingProgress
-import com.julen.clases.ui.components.SectionHeader
-import com.julen.clases.ui.components.StatTile
-import com.julen.clases.ui.components.SubjectBadge
+import com.julen.clases.ui.components.RowIcon
+import com.julen.clases.ui.components.SectionTitle
+import com.julen.clases.ui.components.screenPadding
 import com.julen.clases.ui.daysUntil
 import com.julen.clases.ui.durationText
 import com.julen.clases.ui.formatDateUtc
@@ -87,13 +75,10 @@ import com.julen.clases.ui.formatLocal
 import com.julen.clases.ui.formatPercent
 import com.julen.clases.ui.formatScore
 import com.julen.clases.ui.greeting
-import com.julen.clases.ui.initialOf
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.relativeDay
 import com.julen.clases.ui.theme.AppColors
-import com.julen.clases.ui.theme.heroGradient
 import com.julen.clases.ui.theme.color
-import com.julen.clases.ui.theme.gradeColor
 import com.julen.clases.ui.theme.subjectColor
 
 @Composable
@@ -104,67 +89,70 @@ fun HomeScreen(
     showMessage: ShowMessage,
 ) {
     var showPeriodPicker by remember { mutableStateOf(false) }
+    val title = greeting(state.nowMillis) + if (state.userName.isNotBlank()) ", ${state.userName}" else ""
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item { HomeHeader(state, onSettings = navigator.openSettings) }
-
-        item {
-            NowCard(
-                state = state,
-                onAbsence = { registerAbsence(viewModel, it, showMessage) },
-                onTardy = { registerTardy(viewModel, it, showMessage) },
-                onOpenSubject = navigator.openSubject,
-            )
-        }
-
-        state.nextExam?.let { exam ->
-            item { NextExamCard(exam, state.todayUtc, onClick = { navigator.openTab(Destination.AGENDA) }) }
-        }
-
-        item { StatsRow(state, navigator) }
-
-        item { WeekStrip(state, onClick = { navigator.openTab(Destination.AGENDA) }) }
-
-        if (state.period == null) {
-            item { ConfigurePeriodCard(onConfigure = { showPeriodPicker = true }) }
-        } else {
-            item { PeriodCard(state, onClick = { navigator.openTab(Destination.ATTENDANCE) }) }
-        }
-
-        if (state.subjectsAtRisk.isNotEmpty()) {
-            item { RiskCard(state, onOpenSubject = navigator.openSubject) }
-        }
-
-        val day = state.today
-        if (day != null && Timetable.blocksFor(day).isNotEmpty()) {
+    AppScreen(
+        title = title,
+        actions = {
+            IconButton(onClick = navigator.openSettings) {
+                Icon(Icons.Outlined.Settings, contentDescription = "Ajustes")
+            }
+        },
+    ) { inner ->
+        LazyColumn(contentPadding = screenPadding(inner)) {
             item {
-                SectionHeader(
-                    "Hoy · ${Timetable.dayNames[day]}",
-                    actionLabel = "Semana",
-                    onAction = { navigator.openTab(Destination.SCHEDULE) },
+                Text(
+                    formatLocal(state.nowMillis, "EEEE, d 'de' MMMM").capitalized(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 12.dp),
                 )
             }
+
             item {
-                AppCard(contentPadding = 14.dp) {
-                    Timetable.blocksFor(day).forEach { block ->
-                        TimelineRow(block, state.minuteOfDay, onOpenSubject = navigator.openSubject)
+                NowSection(
+                    state = state,
+                    onAbsence = { registerAbsence(viewModel, it, showMessage) },
+                    onTardy = { registerTardy(viewModel, it, showMessage) },
+                    onOpenSubject = navigator.openSubject,
+                )
+            }
+
+            item { SectionTitle("Esta semana") }
+            item { WeekStrip(state, onClick = { navigator.openTab(Destination.AGENDA) }) }
+
+            val day = state.today
+            if (day != null && Timetable.blocksFor(day).isNotEmpty()) {
+                item {
+                    SectionTitle(
+                        "Hoy, ${Timetable.dayNames[day].lowercase()}",
+                        actionLabel = "Semana",
+                        onAction = { navigator.openTab(Destination.SCHEDULE) },
+                    )
+                }
+                item {
+                    ListGroup {
+                        val blocks = Timetable.blocksFor(day)
+                        blocks.forEachIndexed { index, block ->
+                            if (index > 0) GroupDivider(inset = 72.dp)
+                            TimelineRow(block, state.minuteOfDay, onOpenSubject = navigator.openSubject)
+                        }
                     }
                 }
             }
-        }
 
-        item {
-            SectionHeader(
-                "Próximas tareas",
-                actionLabel = if (state.pendingTasks.isEmpty()) "Añadir" else "Ver todas",
-                onAction = { navigator.openTab(Destination.AGENDA) },
-            )
+            item { SectionTitle("Resumen") }
+            item { SummaryGroup(state, navigator, onConfigurePeriod = { showPeriodPicker = true }) }
+
+            item {
+                SectionTitle(
+                    "Próximas tareas",
+                    actionLabel = if (state.pendingTasks.isEmpty()) "Añadir" else "Ver todas",
+                    onAction = { navigator.openTab(Destination.AGENDA) },
+                )
+            }
+            item { UpcomingTasks(state, onToggle = { viewModel.toggleTask(it) }) }
         }
-        item { UpcomingTasks(state, onToggle = { viewModel.toggleTask(it.id) }) }
     }
 
     if (showPeriodPicker) {
@@ -182,125 +170,92 @@ fun HomeScreen(
 }
 
 // ---------------------------------------------------------------------------------------------
-
-@Composable
-private fun HomeHeader(state: UiState, onSettings: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(heroGradient())),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(initialOf(state.userName), color = Color.White, style = MaterialTheme.typography.titleLarge)
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                formatLocal(state.nowMillis, "EEEE, d 'de' MMMM").capitalized(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                greeting(state.nowMillis) + if (state.userName.isNotBlank()) ", ${state.userName}" else "",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        FilledTonalIconButton(onClick = onSettings) {
-            Icon(Icons.Filled.Settings, contentDescription = "Ajustes")
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Tarjeta "Ahora"
+// Ahora: tipografía sobre el fondo, sin contenedor
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun NowCard(
+private fun NowSection(
     state: UiState,
     onAbsence: (String) -> Unit,
     onTardy: (String) -> Unit,
     onOpenSubject: (String) -> Unit,
 ) {
-    val white = Color.White
-    val holiday = state.isHolidayToday
     val status = state.nowStatus
+    val holiday = state.isHolidayToday
+    val haptic = LocalHapticFeedback.current
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
-    GradientCard(colors = heroGradient()) {
+    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
         when {
             holiday != null -> {
-                HeroLabel("Día no lectivo", Icons.Filled.BeachAccess)
-                HeroTitle(holiday.name)
-                HeroSubtitle("Hoy no cuenta para las faltas. ¡Aprovecha!")
+                NowLabel("Día no lectivo", MaterialTheme.colorScheme.primary)
+                NowTitle(holiday.name, MaterialTheme.colorScheme.onBackground)
+                NowLine("Hoy no cuenta para las faltas.", muted)
             }
 
             status is NowStatus.InClass -> {
                 val code = status.block.subject.orEmpty()
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        HeroLabel("Ahora en clase", Icons.Filled.Timer)
-                        HeroTitle(code)
-                        HeroSubtitle(Subjects.nameOf(code))
-                    }
-                    RingProgress(
-                        progress = status.progress,
-                        color = white,
-                        trackColor = white.copy(alpha = 0.18f),
-                        size = 86.dp,
-                        strokeWidth = 9.dp,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(status.minutesLeft.toString(), color = white, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                            Text("min", color = white.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                HeroInfoRow(status.block.label, nextText(status.next))
+                val color = subjectColor(code)
+                NowLabel("Ahora · ${status.block.label}", color)
+                NowTitle(code, color)
+                Text(
+                    Subjects.nameOf(code),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HeroButton("Retraso", Icons.Filled.Timer, Modifier.weight(1f)) { onTardy(code) }
-                    HeroButton("Falta", Icons.Filled.Add, Modifier.weight(1f)) { onAbsence(code) }
-                    HeroButton("Ficha", Icons.Filled.ChevronRight, Modifier.weight(1f)) { onOpenSubject(code) }
+                ProgressTrack(fraction = status.progress, color = color, height = 4.dp)
+                Row(modifier = Modifier.padding(top = 8.dp)) {
+                    Text(
+                        "Quedan ${durationText(status.minutesLeft)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(nextText(status.next), style = MaterialTheme.typography.bodyMedium, color = muted)
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onTardy(code)
+                    }) { Text("Retraso") }
+                    FilledTonalButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onAbsence(code)
+                    }) { Text("Falta") }
+                    TextButton(onClick = { onOpenSubject(code) }) { Text("Ver asignatura") }
                 }
             }
 
             status is NowStatus.OnBreak -> {
-                HeroLabel(if (status.block.isFree) "Hora libre" else "Recreo", Icons.Filled.Coffee)
-                HeroTitle("${status.minutesLeft} min")
-                HeroSubtitle("de descanso")
-                Spacer(Modifier.height(14.dp))
-                HeroInfoRow(status.block.label, nextText(status.next))
+                NowLabel(if (status.block.isFree) "Hora libre" else "Recreo", MaterialTheme.colorScheme.primary)
+                NowTitle("${status.minutesLeft} min", MaterialTheme.colorScheme.onBackground)
+                NowLine(nextText(status.next), muted)
             }
 
             status is NowStatus.BeforeClasses -> {
                 val code = status.first.subject.orEmpty()
-                HeroLabel("Hoy empiezas con", Icons.Filled.EventAvailable)
-                HeroTitle(code)
-                HeroSubtitle(Subjects.nameOf(code))
-                Spacer(Modifier.height(14.dp))
-                HeroInfoRow("A las ${formatMinutes(status.first.start)}", "Faltan ${durationText(status.minutesUntil)}")
+                NowLabel("Hoy empiezas con", MaterialTheme.colorScheme.primary)
+                NowTitle(code, subjectColor(code))
+                NowLine(
+                    "${Subjects.nameOf(code)} · a las ${formatMinutes(status.first.start)}, dentro de ${durationText(status.minutesUntil)}",
+                    muted,
+                )
             }
 
             status is NowStatus.NoClasses -> {
                 val weekend = status.reason == NowStatus.Reason.WEEKEND
-                HeroLabel(if (weekend) "Fin de semana" else "Clases terminadas", Icons.Filled.CheckCircle)
-                HeroTitle(if (weekend) "A descansar" else "¡Buen trabajo!")
+                NowLabel(if (weekend) "Fin de semana" else "Clases terminadas", MaterialTheme.colorScheme.primary)
                 val first = status.firstBlock
                 if (first != null && first.subject != null) {
                     val whenText = if (weekend || status.nextDay == 0) "El lunes" else "Mañana"
-                    HeroSubtitle("$whenText empiezas con ${first.subject} a las ${formatMinutes(first.start)}")
+                    NowTitle(first.subject, subjectColor(first.subject))
+                    NowLine("$whenText a las ${formatMinutes(first.start)} · ${Subjects.nameOf(first.subject)}", muted)
+                } else {
+                    NowTitle("Sin clases", MaterialTheme.colorScheme.onBackground)
                 }
             }
         }
@@ -308,266 +263,172 @@ private fun NowCard(
 }
 
 @Composable
-private fun HeroLabel(text: String, icon: ImageVector) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(text.uppercase(), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
-    }
+private fun NowLabel(text: String, color: Color) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = color)
 }
 
 @Composable
-private fun HeroTitle(text: String) {
+private fun NowTitle(text: String, color: Color) {
     Text(
         text,
-        color = Color.White,
-        style = MaterialTheme.typography.displaySmall,
-        modifier = Modifier.padding(top = 6.dp),
+        style = MaterialTheme.typography.displayMedium,
+        color = color,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
 }
 
 @Composable
-private fun HeroSubtitle(text: String) {
-    Text(
-        text,
-        color = Color.White.copy(alpha = 0.85f),
-        style = MaterialTheme.typography.bodyLarge,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
-
-@Composable
-private fun HeroInfoRow(left: String, right: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.12f))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(left, color = Color.White, style = MaterialTheme.typography.labelLarge)
-        Spacer(Modifier.width(10.dp))
-        Text(
-            right,
-            color = Color.White.copy(alpha = 0.8f),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun HeroButton(text: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    Button(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            onClick()
-        },
-        modifier = modifier.height(46.dp),
-        shape = RoundedCornerShape(15.dp),
-        contentPadding = PaddingValues(horizontal = 8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.18f), contentColor = Color.White),
-    ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-    }
+private fun NowLine(text: String, color: Color) {
+    Text(text, style = MaterialTheme.typography.bodyLarge, color = color, modifier = Modifier.padding(top = 4.dp))
 }
 
 private fun nextText(next: Block?): String = when {
     next == null -> "Última clase del día"
-    next.isBreak -> "Después: recreo"
-    next.isFree -> "Después: hora libre"
-    else -> "Después: ${next.subject} a las ${formatMinutes(next.start)}"
+    next.isBreak -> "Después, recreo"
+    next.isFree -> "Después, hora libre"
+    else -> "Después ${next.subject} · ${formatMinutes(next.start)}"
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tarjetas de resumen
+// Semana
 // ---------------------------------------------------------------------------------------------
 
+/** La semana lectiva de un vistazo: fecha, horas de clase, festivos y entregas de cada día. */
 @Composable
-private fun NextExamCard(exam: Task, todayUtc: Long, onClick: () -> Unit) {
-    val due = exam.dueUtc ?: return
-    val days = daysUntil(due, todayUtc)
-    val accent = exam.kind.color()
-    AppCard(onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+private fun WeekStrip(state: UiState, onClick: () -> Unit) {
+    val today = state.todayUtc
+    val weekday = AttendanceMath.weekdayOfUtc(today)
+    val monday = today - weekday * AttendanceMath.DAY_MS
+    // En fin de semana se muestra la semana siguiente.
+    val start = if (weekday >= 5) monday + 7 * AttendanceMath.DAY_MS else monday
+    val scheme = MaterialTheme.colorScheme
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (offset in 0 until 5) {
+            val day = start + offset * AttendanceMath.DAY_MS
+            val isToday = day == today
+            val holiday = state.holidays.any { day in it }
+            val hours = if (holiday) 0 else Timetable.blocksFor(offset).filter { it.subject != null && !it.isBreak }.sumOf { it.durationMinutes } / 60
+            val due = state.tasks.filter { !it.done && it.dueUtc == day }
             Column(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(accent.copy(alpha = 0.14f))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .weight(1f)
+                    .alpha(if (day < today) 0.45f else 1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isToday) scheme.primaryContainer else Color.Transparent)
+                    .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                val fg = if (isToday) scheme.onPrimaryContainer else scheme.onBackground
+                Text(Timetable.dayShortNames[offset], style = MaterialTheme.typography.labelMedium, color = fg.copy(alpha = 0.7f))
+                Text(CalendarMath.dayOf(day).toString(), style = MaterialTheme.typography.titleLarge, color = fg)
                 Text(
-                    if (days == 0) "HOY" else days.toString(),
-                    color = accent,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                if (days > 0) {
-                    Text(if (days == 1) "día" else "días", color = accent, style = MaterialTheme.typography.labelSmall)
-                }
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "PRÓXIMO ${exam.kind.label.uppercase()}",
+                    if (holiday) "Festivo" else "$hours h",
                     style = MaterialTheme.typography.labelSmall,
-                    color = accent,
+                    color = if (holiday) AppColors.Safe else fg.copy(alpha = 0.7f),
                 )
-                Text(
-                    exam.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                    Dot(subjectColor(exam.subject), size = 7.dp)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "${exam.subject} · ${formatDateUtc(due, "EEEE d MMM").capitalized()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .height(6.dp),
+                ) {
+                    due.take(3).forEach { task -> Dot(task.kind.color(), size = 6.dp) }
                 }
             }
         }
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Resumen
+// ---------------------------------------------------------------------------------------------
+
 @Composable
-private fun StatsRow(state: UiState, navigator: Navigator) {
-    val attendance = state.overallAttendance
-    val average = state.overallAverage
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        StatTile(
-            label = "Asistencia",
-            value = attendance?.let { formatPercent(it) } ?: "—",
-            icon = Icons.Filled.TaskAlt,
-            accent = AppColors.Safe,
-            caption = state.streak?.let { "🔥 ${plural(it, "día", "días")} sin faltar" } ?: plural(state.totalAbsences, "falta"),
-            modifier = Modifier.weight(1f),
-            onClick = { navigator.openTab(Destination.ATTENDANCE) },
-        )
-        StatTile(
-            label = "Media",
-            value = average?.let { formatScore((it * 10).toInt() / 10f) } ?: "—",
-            icon = Icons.Filled.Star,
-            accent = gradeColor(average),
-            caption = if (average == null) "Sin notas" else if (average >= 5f) "Aprobando" else "Por debajo de 5",
-            modifier = Modifier.weight(1f),
+private fun SummaryGroup(state: UiState, navigator: Navigator, onConfigurePeriod: () -> Unit) {
+    val chevron: @Composable () -> Unit = {
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    ListGroup {
+        val period = state.period
+        val progress = state.periodProgress
+        if (period == null || progress == null) {
+            GroupItem(
+                headline = "Configura tu evaluación",
+                supporting = "Elige las fechas para calcular cuántas faltas te quedan",
+                leading = { RowIcon(Icons.Outlined.DateRange, MaterialTheme.colorScheme.primary) },
+                trailing = chevron,
+                onClick = onConfigurePeriod,
+            )
+        } else {
+            GroupItem(
+                headline = "Quedan ${plural(progress.remainingDays, "día", "días")} de evaluación",
+                supporting = "${formatDateUtc(period.startUtc, "d MMM")} – ${formatDateUtc(period.endUtc, "d MMM")} · ${(progress.fraction * 100).toInt()} % completado",
+                leading = { RowIcon(Icons.Outlined.DateRange) },
+                trailing = chevron,
+                onClick = { navigator.openTab(Destination.ATTENDANCE) },
+            )
+            GroupDivider(inset = 56.dp)
+            val attendance = state.overallAttendance
+            GroupItem(
+                headline = "Asistencia ${attendance?.let { formatPercent(it) } ?: "—"}",
+                supporting = buildString {
+                    append(plural(state.totalAbsences, "falta"))
+                    append(" · ").append(plural(state.totalTardies, "retraso"))
+                    state.streak?.let { append(" · ").append(plural(it, "día", "días")).append(" sin faltar") }
+                },
+                leading = { RowIcon(Icons.Outlined.FactCheck) },
+                trailing = chevron,
+                onClick = { navigator.openTab(Destination.ATTENDANCE) },
+            )
+        }
+
+        state.subjectsAtRisk.sortedByDescending { it.percentage }.forEach { subject ->
+            GroupDivider(inset = 56.dp)
+            GroupItem(
+                headline = "${subject.code} en riesgo",
+                supporting = if (subject.remainingAbsences >= 0) {
+                    "${formatPercent(subject.percentage)} de faltas · te quedan ${subject.remainingAbsences}"
+                } else {
+                    "${formatPercent(subject.percentage)} de faltas · límite superado"
+                },
+                supportingColor = subject.risk.color(),
+                leading = { RowIcon(Icons.Outlined.ErrorOutline, subject.risk.color()) },
+                trailing = chevron,
+                onClick = { navigator.openSubject(subject.code) },
+            )
+        }
+
+        GroupDivider(inset = 56.dp)
+        val average = state.overallAverage
+        val passed = state.gradeSummaries.count { it.passed == true }
+        val failed = state.gradeSummaries.count { it.passed == false }
+        GroupItem(
+            headline = if (average != null) "Media ${formatScore((average * 10).toInt() / 10f)}" else "Sin notas todavía",
+            supporting = if (average != null) "$passed aprobadas · $failed por debajo de 5" else "Añade calificaciones para ver tu media",
+            leading = { RowIcon(Icons.Outlined.School) },
+            trailing = chevron,
             onClick = { navigator.openTab(Destination.GRADES) },
         )
-        StatTile(
-            label = "Pendientes",
-            value = state.pendingTasks.size.toString(),
-            icon = Icons.Filled.DateRange,
-            accent = MaterialTheme.colorScheme.primary,
-            caption = state.pendingTasks.count { it.kind == TaskKind.EXAM }.let { if (it > 0) plural(it, "examen", "exámenes") else "Sin exámenes" },
-            modifier = Modifier.weight(1f),
-            onClick = { navigator.openTab(Destination.AGENDA) },
-        )
-    }
-}
 
-@Composable
-private fun ConfigurePeriodCard(onConfigure: () -> Unit) {
-    AppCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconBubble(Icons.Filled.DateRange, MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Text("Configura tu evaluación", style = MaterialTheme.typography.titleMedium)
-        }
-        Text(
-            "Elige las fechas de inicio y fin para calcular el porcentaje de faltas y cuántas te quedan en cada asignatura.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 10.dp, bottom = 14.dp),
-        )
-        Button(onClick = onConfigure, shape = RoundedCornerShape(14.dp)) { Text("Elegir fechas") }
-    }
-}
-
-@Composable
-private fun PeriodCard(state: UiState, onClick: () -> Unit) {
-    val period = state.period ?: return
-    val progress = state.periodProgress ?: return
-    AppCard(onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("EVALUACIÓN", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(progress.remainingDays.toString(), style = MaterialTheme.typography.displaySmall)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (progress.remainingDays == 1) "día restante" else "días restantes",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
-                Text(
-                    "${formatDateUtc(period.startUtc, "d MMM")} – ${formatDateUtc(period.endUtc, "d MMM yyyy")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            RingProgress(progress = progress.fraction, color = MaterialTheme.colorScheme.primary, size = 76.dp) {
-                Text(
-                    "${(progress.fraction * 100).toInt()}%",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RiskCard(state: UiState, onOpenSubject: (String) -> Unit) {
-    AppCard(color = AppColors.Danger.copy(alpha = 0.06f)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconBubble(Icons.Filled.WarningAmber, AppColors.Danger, size = 36.dp)
-            Spacer(Modifier.width(12.dp))
-            Text("Asignaturas en riesgo", style = MaterialTheme.typography.titleMedium)
-        }
-        Spacer(Modifier.height(10.dp))
-        state.subjectsAtRisk.sortedByDescending { it.percentage }.forEach { subject ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable { onOpenSubject(subject.code) }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SubjectBadge(subject.code, size = 36.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    ProgressTrack(
-                        fraction = if (subject.allowedAbsences > 0) subject.absences.toFloat() / subject.allowedAbsences else 1f,
-                        color = subject.risk.color(),
-                        height = 6.dp,
-                    )
-                    Text(
-                        if (subject.remainingAbsences >= 0) {
-                            "${formatPercent(subject.percentage)} · te quedan ${subject.remainingAbsences}"
-                        } else {
-                            "${formatPercent(subject.percentage)} · límite superado"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = subject.risk.color(),
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
+        state.nextExam?.let { exam ->
+            val due = exam.dueUtc ?: return@let
+            val days = daysUntil(due, state.todayUtc)
+            GroupDivider(inset = 56.dp)
+            GroupItem(
+                headline = "${exam.kind.label} de ${exam.subject} ${if (days == 0) "hoy" else if (days == 1) "mañana" else "en $days días"}",
+                supporting = "${exam.title} · ${formatDateUtc(due, "EEEE d MMM").capitalized()}",
+                leading = { RowIcon(Icons.Outlined.Quiz, exam.kind.color()) },
+                trailing = chevron,
+                onClick = { navigator.openTab(Destination.AGENDA) },
+            )
         }
     }
 }
@@ -576,35 +437,33 @@ private fun RiskCard(state: UiState, onOpenSubject: (String) -> Unit) {
 // Horario del día
 // ---------------------------------------------------------------------------------------------
 
-/** Fila de la línea de tiempo del día. */
+/** Fila del horario: hora, color de la asignatura y nombre; la clase actual va resaltada. */
 @Composable
 internal fun TimelineRow(block: Block, minuteOfDay: Int?, onOpenSubject: ((String) -> Unit)? = null) {
     val isNow = minuteOfDay != null && minuteOfDay >= block.start && minuteOfDay < block.end
     val isPast = minuteOfDay != null && minuteOfDay >= block.end
-    val color = subjectColor(block.subject)
     val code = block.subject
+    val color = subjectColor(code)
+    val quiet = block.isBreak || block.isFree
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (isPast) 0.45f else 1f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (isNow) color.copy(alpha = 0.12f) else Color.Transparent)
-            .then(
-                if (code != null && onOpenSubject != null) Modifier.clickable { onOpenSubject(code) } else Modifier
-            )
-            .padding(horizontal = 10.dp, vertical = if (block.isBreak) 6.dp else 10.dp),
+            .background(if (isNow) color.copy(alpha = 0.10f) else Color.Transparent)
+            .then(if (code != null && onOpenSubject != null) Modifier.clickable { onOpenSubject(code) } else Modifier)
+            .padding(horizontal = 16.dp, vertical = if (quiet) 10.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.width(50.dp)) {
-            Text(formatMinutes(block.start), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
-            if (!block.isBreak && !block.isFree) {
-                Text(formatMinutes(block.end), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        if (block.isBreak || block.isFree) {
-            Icon(Icons.Filled.Coffee, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
+        Text(
+            formatMinutes(block.start),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(44.dp),
+        )
+        Dot(if (quiet) MaterialTheme.colorScheme.outlineVariant else color, size = 10.dp)
+        Spacer(Modifier.width(14.dp))
+        if (quiet) {
             Text(
                 "${if (block.isBreak) "Recreo" else "Hora libre"} · ${durationText(block.durationMinutes)}",
                 style = MaterialTheme.typography.bodyMedium,
@@ -612,28 +471,23 @@ internal fun TimelineRow(block: Block, minuteOfDay: Int?, onOpenSubject: ((Strin
                 modifier = Modifier.weight(1f),
             )
         } else {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(color),
-            )
-            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(code.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    "${Subjects.nameOf(code.orEmpty())} · ${durationText(block.durationMinutes)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Subjects.nameOf(code.orEmpty()),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Text(
+                    "$code · ${block.label}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        }
-        if (isNow) {
-            Spacer(Modifier.width(8.dp))
-            Pill("Ahora", color)
+            if (isNow) {
+                Text("Ahora", style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -643,98 +497,35 @@ internal fun TimelineRow(block: Block, minuteOfDay: Int?, onOpenSubject: ((Strin
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun UpcomingTasks(state: UiState, onToggle: (Task) -> Unit) {
+private fun UpcomingTasks(state: UiState, onToggle: (Long) -> Unit) {
     val upcoming = state.pendingTasks.sortedWith(taskOrder).take(4)
-    AppCard(contentPadding = 10.dp) {
+    ListGroup {
         if (upcoming.isEmpty()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
-                IconBubble(Icons.Filled.TaskAlt, AppColors.Safe, size = 36.dp)
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    "No tienes nada pendiente. ¡Bien hecho!",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            upcoming.forEach { task ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = task.done, onCheckedChange = { onToggle(task) })
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(task.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Dot(subjectColor(task.subject), size = 6.dp)
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                buildString {
-                                    append(task.subject)
-                                    if (task.kind != TaskKind.TASK) append(" · ").append(task.kind.label)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            task.dueUtc?.let { due ->
-                                val overdue = due < state.todayUtc
-                                Text(
-                                    " · ${relativeDay(due, state.todayUtc)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (overdue) AppColors.Danger else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = if (overdue) FontWeight.Bold else FontWeight.Normal,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            GroupItem(
+                headline = "Nada pendiente",
+                supporting = "Las tareas, exámenes y entregas aparecerán aquí",
+                leading = { RowIcon(Icons.Outlined.TaskAlt, AppColors.Safe) },
+            )
         }
-    }
-}
-
-/** La semana actual de un vistazo: fecha, horas de clase, festivos y entregas de cada día. */
-@Composable
-private fun WeekStrip(state: UiState, onClick: () -> Unit) {
-    val today = state.todayUtc
-    val monday = today - AttendanceMath.weekdayOfUtc(today).coerceAtMost(6) * AttendanceMath.DAY_MS
-    // En fin de semana se muestra la semana siguiente.
-    val start = if (AttendanceMath.weekdayOfUtc(today) >= 5) monday + 7 * AttendanceMath.DAY_MS else monday
-    AppCard(onClick = onClick, contentPadding = 12.dp) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (offset in 0 until 5) {
-                val day = start + offset * AttendanceMath.DAY_MS
-                val isToday = day == today
-                val isPast = day < today
-                val holiday = state.holidays.any { day in it }
-                val hours = if (holiday) 0 else Timetable.blocksFor(offset).filter { it.subject != null && !it.isBreak }.sumOf { it.durationMinutes } / 60
-                val due = state.tasks.filter { !it.done && it.dueUtc == day }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .alpha(if (isPast) 0.5f else 1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(vertical = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    val fg = if (isToday) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                    Text(Timetable.dayShortNames[offset], style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.75f))
-                    Text(CalendarMath.dayOf(day).toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = fg)
-                    Text(
-                        if (holiday) "Festivo" else "$hours h",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (holiday && !isToday) AppColors.Safe else fg.copy(alpha = 0.75f),
+        upcoming.forEachIndexed { index, task ->
+            if (index > 0) GroupDivider(inset = 56.dp)
+            val overdue = task.dueUtc != null && task.dueUtc < state.todayUtc
+            GroupItem(
+                headline = task.title,
+                supporting = buildString {
+                    append(task.subject)
+                    if (task.kind != TaskKind.TASK) append(" · ").append(task.kind.label)
+                    task.dueUtc?.let { append(" · ").append(relativeDay(it, state.todayUtc)) }
+                },
+                supportingColor = if (overdue) AppColors.Danger else null,
+                leading = {
+                    Checkbox(
+                        checked = task.done,
+                        onCheckedChange = { onToggle(task.id) },
+                        modifier = Modifier.size(24.dp),
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier
-                            .padding(top = 6.dp)
-                            .height(6.dp),
-                    ) {
-                        due.take(3).forEach { task ->
-                            Dot(if (isToday) MaterialTheme.colorScheme.onPrimary else task.kind.color(), size = 6.dp)
-                        }
-                    }
-                }
-            }
+                },
+            )
         }
     }
 }

@@ -48,7 +48,6 @@ import com.julen.clases.data.Subject
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.Timetable
 import com.julen.clases.data.formatMinutes
-import com.julen.clases.ui.components.IconBubble
 import com.julen.clases.ui.components.SubjectBadge
 import com.julen.clases.ui.theme.AppColors
 import com.julen.clases.ui.theme.SubjectPalette
@@ -66,7 +65,7 @@ internal fun SubjectPickerDialog(
     val slot = Timetable.slots[slotIndex]
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { IconBubble(Icons.Filled.EditCalendar, MaterialTheme.colorScheme.primary) },
+        icon = { Icon(Icons.Filled.EditCalendar, contentDescription = null) },
         title = { Text("${Timetable.dayNames[day]} · ${formatMinutes(slot.start)}") },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {

@@ -87,7 +87,7 @@ fun OnboardingScreen(state: UiState, viewModel: AppViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.linearGradient(heroGradient())),
+            .background(heroGradient().first()),
     ) {
         Column(
             modifier = Modifier
