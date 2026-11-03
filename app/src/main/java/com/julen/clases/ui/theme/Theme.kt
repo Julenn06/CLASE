@@ -8,6 +8,8 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -18,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.julen.clases.R
+import com.julen.clases.data.AccentColor
 import com.julen.clases.data.RiskLevel
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.ThemeMode
@@ -127,14 +130,86 @@ fun isAppInDarkTheme(mode: ThemeMode): Boolean = when (mode) {
     ThemeMode.DARK -> true
 }
 
-@Composable
-fun ClasesTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content,
+/** Colores que cambian con el acento elegido. */
+private data class AccentPalette(
+    val lightPrimary: Color,
+    val lightContainer: Color,
+    val lightOnContainer: Color,
+    val darkPrimary: Color,
+    val darkOnPrimary: Color,
+    val darkContainer: Color,
+    val hero: List<Color>,
+)
+
+private fun AccentColor.palette(): AccentPalette = when (this) {
+    AccentColor.INDIGO -> AccentPalette(
+        Color(0xFF5046E5), Color(0xFFE6E4FF), Color(0xFF1C1663),
+        Color(0xFF9B95FF), Color(0xFF17124F), Color(0xFF2E2A7A),
+        listOf(Color(0xFF4338CA), Color(0xFF6D28D9), Color(0xFFBE185D)),
     )
+    AccentColor.VIOLET -> AccentPalette(
+        Color(0xFF7C3AED), Color(0xFFEDE7FE), Color(0xFF2E1065),
+        Color(0xFFC4A6FF), Color(0xFF2A0F66), Color(0xFF3B1E7A),
+        listOf(Color(0xFF6D28D9), Color(0xFF9333EA), Color(0xFFDB2777)),
+    )
+    AccentColor.OCEAN -> AccentPalette(
+        Color(0xFF0369A1), Color(0xFFDDF1FD), Color(0xFF082F49),
+        Color(0xFF7DD3FC), Color(0xFF082F49), Color(0xFF0C4A6E),
+        listOf(Color(0xFF1E3A8A), Color(0xFF0369A1), Color(0xFF0891B2)),
+    )
+    AccentColor.EMERALD -> AccentPalette(
+        Color(0xFF047857), Color(0xFFD7F5E8), Color(0xFF022C22),
+        Color(0xFF6EE7B7), Color(0xFF022C22), Color(0xFF064E3B),
+        listOf(Color(0xFF065F46), Color(0xFF047857), Color(0xFF0E7490)),
+    )
+    AccentColor.SUNSET -> AccentPalette(
+        Color(0xFFC2410C), Color(0xFFFFE8D9), Color(0xFF431407),
+        Color(0xFFFDBA74), Color(0xFF431407), Color(0xFF7C2D12),
+        listOf(Color(0xFFB91C1C), Color(0xFFEA580C), Color(0xFFD97706)),
+    )
+    AccentColor.ROSE -> AccentPalette(
+        Color(0xFFBE123C), Color(0xFFFFE4EA), Color(0xFF4C0519),
+        Color(0xFFFDA4AF), Color(0xFF4C0519), Color(0xFF881337),
+        listOf(Color(0xFF9F1239), Color(0xFFDB2777), Color(0xFFF97316)),
+    )
+}
+
+/** Muestra de color del acento (para el selector de Ajustes). */
+fun AccentColor.swatch(): List<Color> = palette().hero
+
+private val LocalHeroGradient = staticCompositionLocalOf { AccentColor.INDIGO.palette().hero }
+
+/** Degradado principal de la marca según el acento elegido. */
+@Composable
+@ReadOnlyComposable
+fun heroGradient(): List<Color> = LocalHeroGradient.current
+
+@Composable
+fun ClasesTheme(darkTheme: Boolean, accent: AccentColor = AccentColor.INDIGO, content: @Composable () -> Unit) {
+    val palette = accent.palette()
+    val scheme = if (darkTheme) {
+        DarkColors.copy(
+            primary = palette.darkPrimary,
+            onPrimary = palette.darkOnPrimary,
+            primaryContainer = palette.darkContainer,
+            secondaryContainer = palette.darkContainer,
+        )
+    } else {
+        LightColors.copy(
+            primary = palette.lightPrimary,
+            primaryContainer = palette.lightContainer,
+            onPrimaryContainer = palette.lightOnContainer,
+            secondaryContainer = palette.lightContainer,
+        )
+    }
+    CompositionLocalProvider(LocalHeroGradient provides palette.hero) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content,
+        )
+    }
 }
 
 object AppColors {
@@ -142,8 +217,6 @@ object AppColors {
     val Warning = Color(0xFFF59E0B)
     val Danger = Color(0xFFEF4444)
 
-    /** Degradado principal de la marca (tarjetas destacadas). */
-    val HeroGradient = listOf(Color(0xFF4338CA), Color(0xFF6D28D9), Color(0xFFBE185D))
     val CalmGradient = listOf(Color(0xFF1E3A8A), Color(0xFF4338CA))
     val SuccessGradient = listOf(Color(0xFF047857), Color(0xFF0E7490))
 }

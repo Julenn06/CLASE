@@ -89,6 +89,7 @@ import com.julen.clases.ui.initialOf
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.relativeDay
 import com.julen.clases.ui.theme.AppColors
+import com.julen.clases.ui.theme.heroGradient
 import com.julen.clases.ui.theme.color
 import com.julen.clases.ui.theme.gradeColor
 import com.julen.clases.ui.theme.subjectColor
@@ -165,6 +166,7 @@ fun HomeScreen(
     if (showPeriodPicker) {
         PeriodPickerDialog(
             initial = state.period,
+            holidays = state.holidays,
             onDismiss = { showPeriodPicker = false },
             onConfirm = { start, end ->
                 viewModel.savePeriod(start, end)
@@ -189,7 +191,7 @@ private fun HomeHeader(state: UiState, onSettings: () -> Unit) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(AppColors.HeroGradient)),
+                .background(Brush.linearGradient(heroGradient())),
             contentAlignment = Alignment.Center,
         ) {
             Text(initialOf(state.userName), color = Color.White, style = MaterialTheme.typography.titleLarge)
@@ -231,7 +233,7 @@ private fun NowCard(
     val holiday = state.isHolidayToday
     val status = state.nowStatus
 
-    GradientCard(colors = AppColors.HeroGradient) {
+    GradientCard(colors = heroGradient()) {
         when {
             holiday != null -> {
                 HeroLabel("Día no lectivo", Icons.Filled.BeachAccess)

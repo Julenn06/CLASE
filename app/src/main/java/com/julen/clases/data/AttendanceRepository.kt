@@ -239,6 +239,11 @@ class AttendanceRepository(context: Context) {
     fun getSummaryHour(): Int = prefs.getInt(KEY_SUMMARY_HOUR, 20)
     fun setSummaryHour(value: Int) = prefs.edit { putInt(KEY_SUMMARY_HOUR, value) }
 
+    fun getAccent(): AccentColor =
+        runCatching { AccentColor.valueOf(prefs.getString(KEY_ACCENT, null) ?: "") }.getOrDefault(AccentColor.INDIGO)
+
+    fun setAccent(accent: AccentColor) = prefs.edit { putString(KEY_ACCENT, accent.name) }
+
     fun getUserName(): String = prefs.getString(KEY_NAME, "") ?: ""
 
     fun setUserName(name: String) = prefs.edit { putString(KEY_NAME, name.trim()) }
@@ -342,6 +347,7 @@ class AttendanceRepository(context: Context) {
         private const val KEY_SUMMARY_HOUR = "reminder_summary_hour"
         private const val KEY_LIMIT = "absence_limit"
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_ACCENT = "accent"
         private const val KEY_NAME = "user_name"
         private const val KEY_ONBOARDED = "onboarded"
         private const val BACKUP_APP_ID = "com.julen.clases"

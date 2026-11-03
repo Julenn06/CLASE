@@ -66,6 +66,7 @@ import com.julen.clases.data.AttendanceRepository
 import com.julen.clases.ui.components.PeriodPickerDialog
 import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.theme.AppColors
+import com.julen.clases.ui.theme.heroGradient
 
 private const val STEPS = 3
 
@@ -86,7 +87,7 @@ fun OnboardingScreen(state: UiState, viewModel: AppViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.linearGradient(AppColors.HeroGradient)),
+            .background(Brush.linearGradient(heroGradient())),
     ) {
         Column(
             modifier = Modifier
@@ -217,7 +218,7 @@ fun OnboardingScreen(state: UiState, viewModel: AppViewModel) {
                 Button(
                     onClick = { if (step < STEPS - 1) step++ else finish() },
                     shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = white, contentColor = Color(0xFF4338CA)),
+                    colors = ButtonDefaults.buttonColors(containerColor = white, contentColor = heroGradient().first()),
                     modifier = Modifier.height(56.dp),
                 ) {
                     Text(

@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.julen.clases.data.AccentColor
 import com.julen.clases.data.AttendanceMath
 import com.julen.clases.data.AttendanceRepository
 import com.julen.clases.data.EvaluationPeriod
@@ -51,6 +52,7 @@ data class UiState(
     val gradeSummaries: List<GradeSummary> = emptyList(),
     val holidays: List<Holiday> = emptyList(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val accent: AccentColor = AccentColor.INDIGO,
     val userName: String = "",
     val schedule: ScheduleConfig = ScheduleConfig.DEFAULT,
     val onboarded: Boolean = true,
@@ -155,6 +157,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             gradeSummaries = GradeMath.summaries(grades),
             holidays = holidays,
             themeMode = repo.getThemeMode(),
+            accent = repo.getAccent(),
             userName = repo.getUserName(),
             schedule = schedule,
             onboarded = repo.isOnboarded(),
@@ -275,6 +278,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAbsenceLimit(value: Float) = update { setAbsenceLimit(value) }
     fun setThemeMode(mode: ThemeMode) = update { setThemeMode(mode) }
+    fun setAccent(accent: AccentColor) = update { setAccent(accent) }
     fun setUserName(name: String) = update { setUserName(name) }
     fun completeOnboarding() = update { setOnboarded() }
     fun resetAttendance() = update { resetAttendance() }
