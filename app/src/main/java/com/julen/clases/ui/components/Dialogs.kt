@@ -22,6 +22,7 @@ import com.julen.clases.data.EvaluationPeriod
 fun PeriodPickerDialog(
     initial: EvaluationPeriod?,
     onDismiss: () -> Unit,
+    title: String = "Periodo de evaluación",
     onConfirm: (startUtc: Long, endUtc: Long) -> Unit,
 ) {
     val state = rememberDateRangePickerState(
@@ -44,7 +45,7 @@ fun PeriodPickerDialog(
     ) {
         DateRangePicker(
             state = state,
-            title = { Text("Periodo de evaluación", modifier = Modifier.padding(start = 24.dp, top = 16.dp)) },
+            title = { Text(title, modifier = Modifier.padding(start = 24.dp, top = 16.dp)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 520.dp),

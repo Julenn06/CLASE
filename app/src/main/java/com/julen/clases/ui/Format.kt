@@ -50,3 +50,15 @@ fun relativeDay(dueUtc: Long, todayUtc: Long): String {
 
 fun plural(count: Int, singular: String, pluralForm: String = singular + "s"): String =
     "$count ${if (count == 1) singular else pluralForm}"
+
+/** Nota con un decimal, sin ",0" si es entera (7 · 7,5). */
+fun formatScore(score: Float): String =
+    if (score % 1f == 0f) score.toInt().toString() else "%.1f".format(score)
+
+fun formatPercent(value: Float): String = "%.1f".format(value).removeSuffix(",0").removeSuffix(".0") + "%"
+
+/** Días que faltan hasta [dueUtc] (negativo si ya pasó). */
+fun daysUntil(dueUtc: Long, todayUtc: Long): Int = ((dueUtc - todayUtc) / AttendanceMath.DAY_MS).toInt()
+
+/** Inicial del nombre para el avatar. */
+fun initialOf(name: String): String = name.trim().firstOrNull()?.uppercase() ?: "🙂"

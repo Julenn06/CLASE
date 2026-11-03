@@ -84,4 +84,14 @@ class AttendanceMathTest {
         }.timeInMillis
         assertEquals(utc(2026, 11, 3), AttendanceMath.todayUtc(lateNight, madrid))
     }
+
+    @Test
+    fun holidaysAreExcludedFromClassHours() {
+        val period = EvaluationPeriod(utc(2026, 11, 2), utc(2026, 11, 15))
+        // Puente del lunes 9 y martes 10.
+        val holidays = listOf(Holiday(1, "Puente", utc(2026, 11, 9), utc(2026, 11, 10)))
+        assertEquals(8, AttendanceMath.classHoursInPeriod(period, "SI", holidays)) // pierde 2 h del lunes
+        assertEquals(3, AttendanceMath.classHoursInPeriod(period, "PMDM", holidays)) // pierde el martes
+        assertEquals(2, AttendanceMath.schoolDaysLost(period, holidays))
+    }
 }

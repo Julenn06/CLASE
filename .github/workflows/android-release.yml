@@ -66,13 +66,17 @@ jobs:
             exit 1
           fi
           version="${TAG#v}"
+          # versionCode creciente a partir de la versión: v3.1.2 -> 30102 (v2.0 -> 20000).
+          IFS=. read -r major minor patch <<< "${version%%-*}"
+          version_code=$(( major * 10000 + ${minor:-0} * 100 + ${patch:-0} ))
           prerelease="$PRERELEASE_INPUT"
           [[ "$version" == *-* ]] && prerelease=true
           {
             echo "VERSION_NAME=$version"
+            echo "VERSION_CODE=$version_code"
             echo "PRERELEASE=$prerelease"
           } >> "$GITHUB_ENV"
-          echo "Versión: $version · pre-release: $prerelease"
+          echo "Versión: $version (code $version_code) · pre-release: $prerelease"
 
       - name: Configurar JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v6
@@ -125,7 +129,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          ./gradlew :app:assembleRelease -PversionName="$VERSION_NAME" || {
+          ./gradlew :app:assembleRelease -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE" || {
             echo "::error title=Fallo al compilar el release::Revisa el log. Si el error es de firma, comprueba las contraseñas y el alias de los secrets."
             exit 1
           }
@@ -141,7 +145,7 @@ jobs:
       - name: Compilar APK debug (sin firma propia)
         if: env.SIGNED != 'true'
         run: |
-          ./gradlew :app:assembleDebug -PversionName="$VERSION_NAME" || {
+          ./gradlew :app:assembleDebug -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE" || {
             echo "::error title=Fallo al compilar el APK::Revisa el log de Gradle."
             exit 1
           }

@@ -1,6 +1,7 @@
 package com.julen.clases.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,19 +15,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BeachAccess
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,44 +48,56 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
 import com.julen.clases.data.Block
 import com.julen.clases.data.NowStatus
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.Task
+import com.julen.clases.data.TaskKind
 import com.julen.clases.data.Timetable
 import com.julen.clases.data.formatMinutes
 import com.julen.clases.ui.Destination
+import com.julen.clases.ui.Navigator
 import com.julen.clases.ui.ShowMessage
 import com.julen.clases.ui.capitalized
 import com.julen.clases.ui.components.AppCard
 import com.julen.clases.ui.components.Dot
+import com.julen.clases.ui.components.GradientCard
+import com.julen.clases.ui.components.IconBubble
 import com.julen.clases.ui.components.PeriodPickerDialog
 import com.julen.clases.ui.components.Pill
 import com.julen.clases.ui.components.ProgressTrack
-import com.julen.clases.ui.components.SectionLabel
+import com.julen.clases.ui.components.RingProgress
+import com.julen.clases.ui.components.SectionHeader
+import com.julen.clases.ui.components.StatTile
 import com.julen.clases.ui.components.SubjectBadge
+import com.julen.clases.ui.daysUntil
 import com.julen.clases.ui.durationText
 import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.formatLocal
+import com.julen.clases.ui.formatPercent
+import com.julen.clases.ui.formatScore
 import com.julen.clases.ui.greeting
+import com.julen.clases.ui.initialOf
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.relativeDay
 import com.julen.clases.ui.theme.AppColors
 import com.julen.clases.ui.theme.color
+import com.julen.clases.ui.theme.gradeColor
 import com.julen.clases.ui.theme.subjectColor
-import java.util.Calendar
 
 @Composable
 fun HomeScreen(
     state: UiState,
     viewModel: AppViewModel,
-    onNavigate: (Destination) -> Unit,
+    navigator: Navigator,
     showMessage: ShowMessage,
 ) {
     var showPeriodPicker by remember { mutableStateOf(false) }
@@ -83,51 +105,61 @@ fun HomeScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item { HomeHeader(state, onSettings = navigator.openSettings) }
+
         item {
-            Column(modifier = Modifier.padding(top = 16.dp, bottom = 2.dp)) {
-                Text(
-                    text = formatLocal(state.nowMillis, "EEEE, d 'de' MMMM").capitalized(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            NowCard(
+                state = state,
+                onAbsence = { registerAbsence(viewModel, it, showMessage) },
+                onTardy = { registerTardy(viewModel, it, showMessage) },
+                onOpenSubject = navigator.openSubject,
+            )
+        }
+
+        state.nextExam?.let { exam ->
+            item { NextExamCard(exam, state.todayUtc, onClick = { navigator.openTab(Destination.AGENDA) }) }
+        }
+
+        item { StatsRow(state, navigator) }
+
+        if (state.period == null) {
+            item { ConfigurePeriodCard(onConfigure = { showPeriodPicker = true }) }
+        } else {
+            item { PeriodCard(state, onClick = { navigator.openTab(Destination.ATTENDANCE) }) }
+        }
+
+        if (state.subjectsAtRisk.isNotEmpty()) {
+            item { RiskCard(state, onOpenSubject = navigator.openSubject) }
+        }
+
+        val day = state.today
+        if (day != null && Timetable.blocksFor(day).isNotEmpty()) {
+            item {
+                SectionHeader(
+                    "Hoy · ${Timetable.dayNames[day]}",
+                    actionLabel = "Semana",
+                    onAction = { navigator.openTab(Destination.SCHEDULE) },
                 )
-                Text(
-                    text = greeting(state.nowMillis),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+            }
+            item {
+                AppCard(contentPadding = 14.dp) {
+                    Timetable.blocksFor(day).forEach { block ->
+                        TimelineRow(block, state.minuteOfDay, onOpenSubject = navigator.openSubject)
+                    }
+                }
             }
         }
 
         item {
-            NowCard(
-                status = state.nowStatus,
-                today = state.today,
-                onAbsence = { registerAbsence(viewModel, it, showMessage) },
-                onTardy = { registerTardy(viewModel, it, showMessage) },
+            SectionHeader(
+                "Próximas tareas",
+                actionLabel = if (state.pendingTasks.isEmpty()) "Añadir" else "Ver todas",
+                onAction = { navigator.openTab(Destination.AGENDA) },
             )
         }
-
-        if (state.today != null) {
-            item { TodayTimeline(state = state, onOpenSchedule = { onNavigate(Destination.SCHEDULE) }) }
-        }
-
-        item {
-            PeriodSummary(
-                state = state,
-                onConfigure = { showPeriodPicker = true },
-                onOpenAttendance = { onNavigate(Destination.ATTENDANCE) },
-            )
-        }
-
-        item {
-            UpcomingTasks(
-                state = state,
-                onToggle = { viewModel.toggleTask(it.id) },
-                onOpenTasks = { onNavigate(Destination.TASKS) },
-            )
-        }
+        item { UpcomingTasks(state, onToggle = { viewModel.toggleTask(it.id) }) }
     }
 
     if (showPeriodPicker) {
@@ -137,8 +169,50 @@ fun HomeScreen(
             onConfirm = { start, end ->
                 viewModel.savePeriod(start, end)
                 showPeriodPicker = false
+                showMessage("Periodo de evaluación guardado", null, null)
             },
         )
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+
+@Composable
+private fun HomeHeader(state: UiState, onSettings: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(AppColors.HeroGradient)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(initialOf(state.userName), color = Color.White, style = MaterialTheme.typography.titleLarge)
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                formatLocal(state.nowMillis, "EEEE, d 'de' MMMM").capitalized(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                greeting(state.nowMillis) + if (state.userName.isNotBlank()) ", ${state.userName}" else "",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        FilledTonalIconButton(onClick = onSettings) {
+            Icon(Icons.Filled.Settings, contentDescription = "Ajustes")
+        }
     }
 }
 
@@ -148,96 +222,79 @@ fun HomeScreen(
 
 @Composable
 private fun NowCard(
-    status: NowStatus,
-    today: Int?,
+    state: UiState,
     onAbsence: (String) -> Unit,
     onTardy: (String) -> Unit,
+    onOpenSubject: (String) -> Unit,
 ) {
     val white = Color.White
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(Brush.linearGradient(AppColors.HeroGradient))
-            .padding(22.dp),
-    ) {
-        when (status) {
-            is NowStatus.InClass -> {
+    val holiday = state.isHolidayToday
+    val status = state.nowStatus
+
+    GradientCard(colors = AppColors.HeroGradient) {
+        when {
+            holiday != null -> {
+                HeroLabel("Día no lectivo", Icons.Filled.BeachAccess)
+                HeroTitle(holiday.name)
+                HeroSubtitle("Hoy no cuenta para las faltas. ¡Aprovecha!")
+            }
+
+            status is NowStatus.InClass -> {
                 val code = status.block.subject.orEmpty()
-                HeroLabel("Ahora en clase")
-                HeroSubject(code)
-                Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(status.block.label, color = white.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.weight(1f))
-                    Icon(Icons.Filled.Timer, null, tint = white, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "quedan ${durationText(status.minutesLeft)}",
+                    Column(modifier = Modifier.weight(1f)) {
+                        HeroLabel("Ahora en clase", Icons.Filled.Timer)
+                        HeroTitle(code)
+                        HeroSubtitle(Subjects.nameOf(code))
+                    }
+                    RingProgress(
+                        progress = status.progress,
                         color = white,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                        trackColor = white.copy(alpha = 0.18f),
+                        size = 86.dp,
+                        strokeWidth = 9.dp,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(status.minutesLeft.toString(), color = white, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                            Text("min", color = white.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
-                Spacer(Modifier.height(8.dp))
-                ProgressTrack(
-                    fraction = status.progress,
-                    color = white,
-                    trackColor = white.copy(alpha = 0.18f),
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(nextText(status.next), color = white.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(14.dp))
+                HeroInfoRow(status.block.label, nextText(status.next))
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     HeroButton("Retraso", Icons.Filled.Timer, Modifier.weight(1f)) { onTardy(code) }
                     HeroButton("Falta", Icons.Filled.Add, Modifier.weight(1f)) { onAbsence(code) }
+                    HeroButton("Ficha", Icons.Filled.ChevronRight, Modifier.weight(1f)) { onOpenSubject(code) }
                 }
             }
 
-            is NowStatus.OnBreak -> {
-                HeroLabel("Recreo")
-                Text(
-                    "Vuelves en ${durationText(status.minutesLeft)}",
-                    color = white,
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(nextText(status.next), color = white.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium)
+            status is NowStatus.OnBreak -> {
+                HeroLabel(if (status.block.isFree) "Hora libre" else "Recreo", Icons.Filled.Coffee)
+                HeroTitle("${status.minutesLeft} min")
+                HeroSubtitle("de descanso")
+                Spacer(Modifier.height(14.dp))
+                HeroInfoRow(status.block.label, nextText(status.next))
             }
 
-            is NowStatus.BeforeClasses -> {
-                HeroLabel("Hoy empiezas con")
-                HeroSubject(status.first.subject.orEmpty())
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "A las ${formatMinutes(status.first.start)} · en ${durationText(status.minutesUntil)}",
-                    color = white.copy(alpha = 0.8f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+            status is NowStatus.BeforeClasses -> {
+                val code = status.first.subject.orEmpty()
+                HeroLabel("Hoy empiezas con", Icons.Filled.EventAvailable)
+                HeroTitle(code)
+                HeroSubtitle(Subjects.nameOf(code))
+                Spacer(Modifier.height(14.dp))
+                HeroInfoRow("A las ${formatMinutes(status.first.start)}", "Faltan ${durationText(status.minutesUntil)}")
             }
 
-            is NowStatus.NoClasses -> {
+            status is NowStatus.NoClasses -> {
                 val weekend = status.reason == NowStatus.Reason.WEEKEND
-                HeroLabel(if (weekend) "Fin de semana" else "Clases terminadas")
-                Text(
-                    if (weekend) "Disfruta del descanso" else "¡Buen trabajo hoy!",
-                    color = white,
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
+                HeroLabel(if (weekend) "Fin de semana" else "Clases terminadas", Icons.Filled.CheckCircle)
+                HeroTitle(if (weekend) "A descansar" else "¡Buen trabajo!")
                 val first = status.firstBlock
                 if (first != null && first.subject != null) {
-                    val whenText = when {
-                        weekend || (today == 4 && status.nextDay == 0) -> "El lunes"
-                        else -> "Mañana"
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "$whenText empiezas con ${first.subject} a las ${formatMinutes(first.start)}",
-                        color = white.copy(alpha = 0.75f),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    val whenText = if (weekend || status.nextDay == 0) "El lunes" else "Mañana"
+                    HeroSubtitle("$whenText empiezas con ${first.subject} a las ${formatMinutes(first.start)}")
                 }
             }
         }
@@ -245,106 +302,305 @@ private fun NowCard(
 }
 
 @Composable
-private fun HeroLabel(text: String) {
-    Text(
-        text = text.uppercase(),
-        color = Color.White.copy(alpha = 0.65f),
-        style = MaterialTheme.typography.labelSmall,
-    )
+private fun HeroLabel(text: String, icon: ImageVector) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(text.uppercase(), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+    }
 }
 
 @Composable
-private fun HeroSubject(code: String) {
+private fun HeroTitle(text: String) {
     Text(
-        text = code,
+        text,
         color = Color.White,
         style = MaterialTheme.typography.displaySmall,
-        modifier = Modifier.padding(top = 2.dp),
-    )
-    Text(
-        text = Subjects.nameOf(code),
-        color = Color.White.copy(alpha = 0.85f),
-        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(top = 6.dp),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
 }
 
 @Composable
-private fun HeroButton(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
+private fun HeroSubtitle(text: String) {
+    Text(
+        text,
+        color = Color.White.copy(alpha = 0.85f),
+        style = MaterialTheme.typography.bodyLarge,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun HeroInfoRow(left: String, right: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(left, color = Color.White, style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            right,
+            color = Color.White.copy(alpha = 0.8f),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun HeroButton(text: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Button(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         modifier = modifier.height(46.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color.White.copy(alpha = 0.16f),
-            contentColor = Color.White,
-        ),
+        shape = RoundedCornerShape(15.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.18f), contentColor = Color.White),
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(text, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(4.dp))
+        Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
     }
 }
 
 private fun nextText(next: Block?): String = when {
-    next == null -> "Es la última clase del día"
-    next.isBreak -> "Después: recreo a las ${formatMinutes(next.start)}"
+    next == null -> "Última clase del día"
+    next.isBreak -> "Después: recreo"
+    next.isFree -> "Después: hora libre"
     else -> "Después: ${next.subject} a las ${formatMinutes(next.start)}"
 }
 
 // ---------------------------------------------------------------------------------------------
-// Horario de hoy
+// Tarjetas de resumen
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun TodayTimeline(state: UiState, onOpenSchedule: () -> Unit) {
-    val day = state.today ?: return
-    val minute = remember(state.nowMillis) {
-        Calendar.getInstance().apply { timeInMillis = state.nowMillis }.let {
-            it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE)
-        }
-    }
-
-    AppCard {
-        SectionLabel("Hoy · ${Timetable.dayNames[day]}") {
-            TextButton(onClick = onOpenSchedule) { Text("Semana") }
-        }
-        Timetable.blocksFor(day).forEach { block ->
-            TimelineRow(block = block, minuteOfDay = minute)
+private fun NextExamCard(exam: Task, todayUtc: Long, onClick: () -> Unit) {
+    val due = exam.dueUtc ?: return
+    val days = daysUntil(due, todayUtc)
+    val accent = exam.kind.color()
+    AppCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(accent.copy(alpha = 0.14f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    if (days == 0) "HOY" else days.toString(),
+                    color = accent,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                if (days > 0) {
+                    Text(if (days == 1) "día" else "días", color = accent, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "PRÓXIMO ${exam.kind.label.uppercase()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accent,
+                )
+                Text(
+                    exam.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Dot(subjectColor(exam.subject), size = 7.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "${exam.subject} · ${formatDateUtc(due, "EEEE d MMM").capitalized()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-internal fun TimelineRow(block: Block, minuteOfDay: Int?) {
+private fun StatsRow(state: UiState, navigator: Navigator) {
+    val attendance = state.overallAttendance
+    val average = state.overallAverage
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatTile(
+            label = "Asistencia",
+            value = attendance?.let { formatPercent(it) } ?: "—",
+            icon = Icons.Filled.TaskAlt,
+            accent = AppColors.Safe,
+            caption = plural(state.totalAbsences, "falta"),
+            modifier = Modifier.weight(1f),
+            onClick = { navigator.openTab(Destination.ATTENDANCE) },
+        )
+        StatTile(
+            label = "Media",
+            value = average?.let { formatScore((it * 10).toInt() / 10f) } ?: "—",
+            icon = Icons.Filled.Star,
+            accent = gradeColor(average),
+            caption = if (average == null) "Sin notas" else if (average >= 5f) "Aprobando" else "Por debajo de 5",
+            modifier = Modifier.weight(1f),
+            onClick = { navigator.openTab(Destination.GRADES) },
+        )
+        StatTile(
+            label = "Pendientes",
+            value = state.pendingTasks.size.toString(),
+            icon = Icons.Filled.DateRange,
+            accent = MaterialTheme.colorScheme.primary,
+            caption = state.pendingTasks.count { it.kind == TaskKind.EXAM }.let { if (it > 0) plural(it, "examen", "exámenes") else "Sin exámenes" },
+            modifier = Modifier.weight(1f),
+            onClick = { navigator.openTab(Destination.AGENDA) },
+        )
+    }
+}
+
+@Composable
+private fun ConfigurePeriodCard(onConfigure: () -> Unit) {
+    AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(Icons.Filled.DateRange, MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Text("Configura tu evaluación", style = MaterialTheme.typography.titleMedium)
+        }
+        Text(
+            "Elige las fechas de inicio y fin para calcular el porcentaje de faltas y cuántas te quedan en cada asignatura.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp, bottom = 14.dp),
+        )
+        Button(onClick = onConfigure, shape = RoundedCornerShape(14.dp)) { Text("Elegir fechas") }
+    }
+}
+
+@Composable
+private fun PeriodCard(state: UiState, onClick: () -> Unit) {
+    val period = state.period ?: return
+    val progress = state.periodProgress ?: return
+    AppCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("EVALUACIÓN", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(progress.remainingDays.toString(), style = MaterialTheme.typography.displaySmall)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (progress.remainingDays == 1) "día restante" else "días restantes",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+                Text(
+                    "${formatDateUtc(period.startUtc, "d MMM")} – ${formatDateUtc(period.endUtc, "d MMM yyyy")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            RingProgress(progress = progress.fraction, color = MaterialTheme.colorScheme.primary, size = 76.dp) {
+                Text(
+                    "${(progress.fraction * 100).toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RiskCard(state: UiState, onOpenSubject: (String) -> Unit) {
+    AppCard(color = AppColors.Danger.copy(alpha = 0.06f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(Icons.Filled.WarningAmber, AppColors.Danger, size = 36.dp)
+            Spacer(Modifier.width(12.dp))
+            Text("Asignaturas en riesgo", style = MaterialTheme.typography.titleMedium)
+        }
+        Spacer(Modifier.height(10.dp))
+        state.subjectsAtRisk.sortedByDescending { it.percentage }.forEach { subject ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { onOpenSubject(subject.code) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SubjectBadge(subject.code, size = 36.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    ProgressTrack(
+                        fraction = if (subject.allowedAbsences > 0) subject.absences.toFloat() / subject.allowedAbsences else 1f,
+                        color = subject.risk.color(),
+                        height = 6.dp,
+                    )
+                    Text(
+                        if (subject.remainingAbsences >= 0) {
+                            "${formatPercent(subject.percentage)} · te quedan ${subject.remainingAbsences}"
+                        } else {
+                            "${formatPercent(subject.percentage)} · límite superado"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subject.risk.color(),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Horario del día
+// ---------------------------------------------------------------------------------------------
+
+/** Fila de la línea de tiempo del día. */
+@Composable
+internal fun TimelineRow(block: Block, minuteOfDay: Int?, onOpenSubject: ((String) -> Unit)? = null) {
     val isNow = minuteOfDay != null && minuteOfDay >= block.start && minuteOfDay < block.end
     val isPast = minuteOfDay != null && minuteOfDay >= block.end
     val color = subjectColor(block.subject)
+    val code = block.subject
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (isPast) 0.45f else 1f)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (isNow) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else Color.Transparent)
-            .padding(horizontal = 8.dp, vertical = if (block.isBreak) 6.dp else 10.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (isNow) color.copy(alpha = 0.12f) else Color.Transparent)
+            .then(
+                if (code != null && onOpenSubject != null) Modifier.clickable { onOpenSubject(code) } else Modifier
+            )
+            .padding(horizontal = 10.dp, vertical = if (block.isBreak) 6.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = formatMinutes(block.start),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(48.dp),
-        )
-        if (block.isBreak) {
+        Column(modifier = Modifier.width(50.dp)) {
+            Text(formatMinutes(block.start), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+            if (!block.isBreak && !block.isFree) {
+                Text(formatMinutes(block.end), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (block.isBreak || block.isFree) {
+            Icon(Icons.Filled.Coffee, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
             Text(
-                "Recreo · ${durationText(block.durationMinutes)}",
+                "${if (block.isBreak) "Recreo" else "Hora libre"} · ${durationText(block.durationMinutes)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -353,20 +609,15 @@ internal fun TimelineRow(block: Block, minuteOfDay: Int?) {
             Box(
                 modifier = Modifier
                     .width(4.dp)
-                    .height(36.dp)
+                    .height(38.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(color),
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
+                Text(code.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    block.subject.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    "${Subjects.nameOf(block.subject.orEmpty())} · ${durationText(block.durationMinutes)}",
+                    "${Subjects.nameOf(code.orEmpty())} · ${durationText(block.durationMinutes)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -376,123 +627,8 @@ internal fun TimelineRow(block: Block, minuteOfDay: Int?) {
         }
         if (isNow) {
             Spacer(Modifier.width(8.dp))
-            Pill("Ahora", MaterialTheme.colorScheme.primary)
+            Pill("Ahora", color)
         }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Resumen de la evaluación
-// ---------------------------------------------------------------------------------------------
-
-@Composable
-private fun PeriodSummary(state: UiState, onConfigure: () -> Unit, onOpenAttendance: () -> Unit) {
-    val period = state.period
-    val progress = state.periodProgress
-    if (period == null || progress == null) {
-        AppCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.DateRange, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Text("Configura tu evaluación", style = MaterialTheme.typography.titleMedium)
-            }
-            Text(
-                "Elige las fechas de inicio y fin para calcular el porcentaje de faltas y cuántas te quedan en cada asignatura.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
-            )
-            Button(onClick = onConfigure, shape = RoundedCornerShape(14.dp)) { Text("Elegir fechas") }
-        }
-        return
-    }
-
-    AppCard(onClick = onOpenAttendance) {
-        SectionLabel("Evaluación") {
-            Text(
-                "${formatDateUtc(period.startUtc, "d MMM")} – ${formatDateUtc(period.endUtc, "d MMM")}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                progress.remainingDays.toString(),
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (progress.remainingDays == 1) "día restante" else "días restantes",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 6.dp),
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                "${(progress.fraction * 100).toInt()}%",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 6.dp),
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        ProgressTrack(fraction = progress.fraction, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatTile("Faltas", state.totalAbsences.toString(), Modifier.weight(1f))
-            StatTile("Retrasos", state.totalTardies.toString(), Modifier.weight(1f))
-            StatTile(
-                "En riesgo",
-                state.subjectsAtRisk.size.toString(),
-                Modifier.weight(1f),
-                valueColor = if (state.subjectsAtRisk.isEmpty()) AppColors.Safe else AppColors.Danger,
-            )
-        }
-        state.subjectsAtRisk.takeIf { it.isNotEmpty() }?.let { risky ->
-            Spacer(Modifier.height(14.dp))
-            risky.sortedByDescending { it.percentage }.forEach { subject ->
-                Row(
-                    modifier = Modifier.padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Warning, null, tint = subject.risk.color(), modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        subject.code,
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.width(56.dp),
-                    )
-                    Text(
-                        if (subject.remainingAbsences >= 0) {
-                            "${"%.1f".format(subject.percentage)}% · te quedan ${subject.remainingAbsences}"
-                        } else {
-                            "${"%.1f".format(subject.percentage)}% · límite superado"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = subject.risk.color(),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatTile(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface,
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.headlineSmall, color = valueColor, fontWeight = FontWeight.Black)
     }
 }
 
@@ -501,35 +637,33 @@ private fun StatTile(
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun UpcomingTasks(state: UiState, onToggle: (Task) -> Unit, onOpenTasks: () -> Unit) {
-    val upcoming = state.pendingTasks.sortedWith(taskOrder).take(3)
-    AppCard {
-        SectionLabel("Próximas tareas") {
-            TextButton(onClick = onOpenTasks) { Text(if (upcoming.isEmpty()) "Añadir" else "Ver todas") }
-        }
+private fun UpcomingTasks(state: UiState, onToggle: (Task) -> Unit) {
+    val upcoming = state.pendingTasks.sortedWith(taskOrder).take(4)
+    AppCard(contentPadding = 10.dp) {
         if (upcoming.isEmpty()) {
-            Text(
-                "No tienes tareas pendientes. ¡Bien hecho!",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+                IconBubble(Icons.Filled.TaskAlt, AppColors.Safe, size = 36.dp)
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    "No tienes nada pendiente. ¡Bien hecho!",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         } else {
             upcoming.forEach { task ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = task.done, onCheckedChange = { onToggle(task) })
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            task.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Text(task.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Dot(subjectColor(task.subject), size = 6.dp)
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                task.subject,
+                                buildString {
+                                    append(task.subject)
+                                    if (task.kind != TaskKind.TASK) append(" · ").append(task.kind.label)
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -546,22 +680,6 @@ private fun UpcomingTasks(state: UiState, onToggle: (Task) -> Unit, onOpenTasks:
                     }
                 }
             }
-            val more = state.pendingTasks.size - upcoming.size
-            if (more > 0) {
-                Text(
-                    "y ${plural(more, "tarea más", "tareas más")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 12.dp, top = 4.dp),
-                    fontSize = 12.sp,
-                )
-            }
         }
     }
 }
-
-/** Pendientes primero, después por fecha límite (sin fecha al final) y por antigüedad. */
-internal val taskOrder: Comparator<Task> =
-    compareBy<Task> { it.done }
-        .thenBy { it.dueUtc ?: Long.MAX_VALUE }
-        .thenBy { it.id }

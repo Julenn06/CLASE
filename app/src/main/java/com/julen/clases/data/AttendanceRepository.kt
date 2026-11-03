@@ -8,7 +8,7 @@ import org.json.JSONObject
 
 /**
  * Persistencia local en SharedPreferences.
- * Mantiene las mismas claves que la versión anterior para no perder datos al actualizar.
+ * Mantiene las mismas claves que las versiones anteriores para no perder datos al actualizar.
  */
 class AttendanceRepository(context: Context) {
 
@@ -83,18 +83,12 @@ class AttendanceRepository(context: Context) {
         )
     }
 
-    private fun saveHistory(entries: List<HistoryEntry>) {
-        val array = JSONArray()
-        entries.forEach { e ->
-            array.put(
-                JSONObject()
-                    .put("s", e.subject)
-                    .put("t", if (e.type == EntryType.TARDY) "T" else "A")
-                    .put("ts", e.timestamp)
-                    .put("auto", e.fromTardies)
-            )
-        }
-        prefs.edit { putString(KEY_HISTORY, array.toString()) }
+    private fun saveHistory(entries: List<HistoryEntry>) = writeArray(KEY_HISTORY, entries) { e ->
+        JSONObject()
+            .put("s", e.subject)
+            .put("t", if (e.type == EntryType.TARDY) "T" else "A")
+            .put("ts", e.timestamp)
+            .put("auto", e.fromTardies)
     }
 
     private fun appendHistory(entry: HistoryEntry) = saveHistory(getHistory() + entry)
@@ -121,6 +115,57 @@ class AttendanceRepository(context: Context) {
         putLong("eval_end", endUtc)
     }
 
+    // ---------- Horario y asignaturas ----------
+
+    /** Horario guardado, o null si se usa el de por defecto. */
+    fun getSchedule(): ScheduleConfig? {
+        val raw = prefs.getString(KEY_SCHEDULE, null) ?: return null
+        return runCatching {
+            val root = JSONObject(raw)
+            val subjects = root.getJSONArray("subjects").let { arr ->
+                (0 until arr.length()).map { i ->
+                    val o = arr.getJSONObject(i)
+                    Subject(o.getString("code"), o.getString("name"), o.optInt("color", 0))
+                }
+            }
+            val classes = root.getJSONArray("classes").let { days ->
+                (0 until Timetable.DAYS).map { d ->
+                    val day = days.optJSONArray(d) ?: JSONArray()
+                    (0 until Timetable.CLASS_SLOTS).map { i ->
+                        if (day.isNull(i)) null else day.optString(i).takeIf { it.isNotBlank() }
+                    }
+                }
+            }
+            ScheduleConfig(subjects, classes)
+        }.getOrNull()
+    }
+
+    fun saveSchedule(config: ScheduleConfig) {
+        val subjects = JSONArray()
+        config.subjects.forEach { s ->
+            subjects.put(JSONObject().put("code", s.code).put("name", s.name).put("color", s.colorIndex))
+        }
+        val classes = JSONArray()
+        config.classes.forEach { day ->
+            val arr = JSONArray()
+            day.forEach { arr.put(it ?: JSONObject.NULL) }
+            classes.put(arr)
+        }
+        prefs.edit { putString(KEY_SCHEDULE, JSONObject().put("subjects", subjects).put("classes", classes).toString()) }
+    }
+
+    fun resetSchedule() = prefs.edit { remove(KEY_SCHEDULE) }
+
+    // ---------- Días no lectivos ----------
+
+    fun getHolidays(): List<Holiday> = readArray(KEY_HOLIDAYS).mapObjects { o ->
+        Holiday(o.getLong("id"), o.getString("name"), o.getLong("start"), o.getLong("end"))
+    }
+
+    fun saveHolidays(holidays: List<Holiday>) = writeArray(KEY_HOLIDAYS, holidays) { h ->
+        JSONObject().put("id", h.id).put("name", h.name).put("start", h.startUtc).put("end", h.endUtc)
+    }
+
     // ---------- Apuntes ----------
 
     fun getNote(subject: String): String = prefs.getString("${subject}_note", "") ?: ""
@@ -136,21 +181,41 @@ class AttendanceRepository(context: Context) {
             title = o.getString("title"),
             dueUtc = if (o.has("due") && !o.isNull("due")) o.getLong("due") else null,
             done = o.optBoolean("done", false),
+            kind = runCatching { TaskKind.valueOf(o.optString("kind")) }.getOrDefault(TaskKind.TASK),
         )
     }
 
-    fun saveTasks(tasks: List<Task>) {
-        val array = JSONArray()
-        tasks.forEach { t ->
-            val o = JSONObject()
-                .put("id", t.id)
-                .put("s", t.subject)
-                .put("title", t.title)
-                .put("done", t.done)
-            t.dueUtc?.let { o.put("due", it) }
-            array.put(o)
-        }
-        prefs.edit { putString(KEY_TASKS, array.toString()) }
+    fun saveTasks(tasks: List<Task>) = writeArray(KEY_TASKS, tasks) { t ->
+        JSONObject()
+            .put("id", t.id)
+            .put("s", t.subject)
+            .put("title", t.title)
+            .put("done", t.done)
+            .put("kind", t.kind.name)
+            .also { o -> t.dueUtc?.let { o.put("due", it) } }
+    }
+
+    // ---------- Calificaciones ----------
+
+    fun getGrades(): List<Grade> = readArray(KEY_GRADES).mapObjects { o ->
+        Grade(
+            id = o.getLong("id"),
+            subject = o.getString("s"),
+            title = o.getString("title"),
+            score = o.getDouble("score").toFloat(),
+            weight = o.optDouble("weight", 1.0).toFloat(),
+            dateUtc = if (o.has("date") && !o.isNull("date")) o.getLong("date") else null,
+        )
+    }
+
+    fun saveGrades(grades: List<Grade>) = writeArray(KEY_GRADES, grades) { g ->
+        JSONObject()
+            .put("id", g.id)
+            .put("s", g.subject)
+            .put("title", g.title)
+            .put("score", g.score.toDouble())
+            .put("weight", g.weight.toDouble())
+            .also { o -> g.dateUtc?.let { o.put("date", it) } }
     }
 
     // ---------- Ajustes ----------
@@ -164,6 +229,30 @@ class AttendanceRepository(context: Context) {
 
     fun setThemeMode(mode: ThemeMode) = prefs.edit { putString(KEY_THEME, mode.name) }
 
+    // Avisos
+    fun isClassReminderEnabled(): Boolean = prefs.getBoolean(KEY_CLASS_REMINDER, false)
+    fun setClassReminderEnabled(value: Boolean) = prefs.edit { putBoolean(KEY_CLASS_REMINDER, value) }
+    fun getReminderLeadMinutes(): Int = prefs.getInt(KEY_REMINDER_LEAD, 5)
+    fun setReminderLeadMinutes(value: Int) = prefs.edit { putInt(KEY_REMINDER_LEAD, value) }
+    fun isDailySummaryEnabled(): Boolean = prefs.getBoolean(KEY_SUMMARY, false)
+    fun setDailySummaryEnabled(value: Boolean) = prefs.edit { putBoolean(KEY_SUMMARY, value) }
+    fun getSummaryHour(): Int = prefs.getInt(KEY_SUMMARY_HOUR, 20)
+    fun setSummaryHour(value: Int) = prefs.edit { putInt(KEY_SUMMARY_HOUR, value) }
+
+    fun getUserName(): String = prefs.getString(KEY_NAME, "") ?: ""
+
+    fun setUserName(name: String) = prefs.edit { putString(KEY_NAME, name.trim()) }
+
+    /** true si ya se ha completado (o saltado) la bienvenida. */
+    fun isOnboarded(): Boolean = prefs.getBoolean(KEY_ONBOARDED, false)
+
+    /** Quien ya usaba una versión anterior (hay datos guardados) no ve la bienvenida. */
+    fun migrateOnboarding() {
+        if (!prefs.contains(KEY_ONBOARDED) && prefs.all.isNotEmpty()) setOnboarded()
+    }
+
+    fun setOnboarded() = prefs.edit { putBoolean(KEY_ONBOARDED, true) }
+
     // ---------- Borrado ----------
 
     fun resetAttendance() = prefs.edit {
@@ -174,7 +263,57 @@ class AttendanceRepository(context: Context) {
         remove(KEY_HISTORY)
     }
 
-    fun resetAll() = prefs.edit { clear() }
+    /** Borra todo menos el aviso de bienvenida ya visto. */
+    fun resetAll() = prefs.edit(commit = true) {
+        clear()
+        putBoolean(KEY_ONBOARDED, true)
+    }
+
+    // ---------- Copia de seguridad ----------
+
+    /** Exporta todos los datos a un JSON con tipos, para poder restaurarlos tal cual. */
+    fun exportBackup(now: Long = System.currentTimeMillis()): String {
+        val data = JSONObject()
+        prefs.all.toSortedMap().forEach { (key, value) ->
+            val entry = when (value) {
+                is Int -> JSONObject().put("t", "i").put("v", value)
+                is Long -> JSONObject().put("t", "l").put("v", value)
+                is Float -> JSONObject().put("t", "f").put("v", value.toDouble())
+                is Boolean -> JSONObject().put("t", "b").put("v", value)
+                is String -> JSONObject().put("t", "s").put("v", value)
+                else -> null
+            }
+            if (entry != null) data.put(key, entry)
+        }
+        return JSONObject()
+            .put("app", BACKUP_APP_ID)
+            .put("version", BACKUP_VERSION)
+            .put("exportedAt", now)
+            .put("data", data)
+            .toString(2)
+    }
+
+    /** Sustituye todos los datos por los de la copia. Devuelve false si el archivo no es válido. */
+    fun importBackup(json: String): Boolean {
+        val root = runCatching { JSONObject(json) }.getOrNull() ?: return false
+        if (root.optString("app") != BACKUP_APP_ID) return false
+        val data = root.optJSONObject("data") ?: return false
+        prefs.edit(commit = true) {
+            clear()
+            data.keys().forEach { key ->
+                val entry = data.optJSONObject(key) ?: return@forEach
+                when (entry.optString("t")) {
+                    "i" -> putInt(key, entry.getInt("v"))
+                    "l" -> putLong(key, entry.getLong("v"))
+                    "f" -> putFloat(key, entry.getDouble("v").toFloat())
+                    "b" -> putBoolean(key, entry.getBoolean("v"))
+                    "s" -> putString(key, entry.getString("v"))
+                }
+            }
+            putBoolean(KEY_ONBOARDED, true)
+        }
+        return true
+    }
 
     // ---------- Utilidades JSON ----------
 
@@ -184,12 +323,29 @@ class AttendanceRepository(context: Context) {
     private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> =
         (0 until length()).mapNotNull { i -> runCatching { transform(getJSONObject(i)) }.getOrNull() }
 
+    private inline fun <T> writeArray(key: String, items: List<T>, toJson: (T) -> JSONObject) {
+        val array = JSONArray()
+        items.forEach { array.put(toJson(it)) }
+        prefs.edit { putString(key, array.toString()) }
+    }
+
     companion object {
         private const val PREFS_NAME = "attendance_prefs"
         private const val KEY_HISTORY = "history"
         private const val KEY_TASKS = "tasks"
+        private const val KEY_GRADES = "grades"
+        private const val KEY_HOLIDAYS = "holidays"
+        private const val KEY_SCHEDULE = "schedule"
+        private const val KEY_CLASS_REMINDER = "reminder_class"
+        private const val KEY_REMINDER_LEAD = "reminder_lead"
+        private const val KEY_SUMMARY = "reminder_summary"
+        private const val KEY_SUMMARY_HOUR = "reminder_summary_hour"
         private const val KEY_LIMIT = "absence_limit"
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_NAME = "user_name"
+        private const val KEY_ONBOARDED = "onboarded"
+        private const val BACKUP_APP_ID = "com.julen.clases"
+        private const val BACKUP_VERSION = 1
         const val DEFAULT_LIMIT = 15f
     }
 }

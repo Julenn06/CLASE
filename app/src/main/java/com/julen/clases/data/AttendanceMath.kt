@@ -28,6 +28,9 @@ data class SubjectAttendance(
     val risk: RiskLevel,
 ) {
     val remainingAbsences: Int get() = allowedAbsences - absences
+
+    /** Porcentaje de asistencia (100 % − faltas). */
+    val attendancePercent: Float get() = (100f - percentage).coerceIn(0f, 100f)
 }
 
 object AttendanceMath {
@@ -51,17 +54,36 @@ object AttendanceMath {
         return (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
     }
 
-    /** Horas lectivas reales de [subject] entre ambas fechas (inclusive) según el horario. */
-    fun classHoursInPeriod(period: EvaluationPeriod, subject: String): Int {
+    /**
+     * Horas lectivas reales de [subject] entre ambas fechas (inclusive) según el horario,
+     * descontando los días no lectivos de [holidays].
+     */
+    fun classHoursInPeriod(
+        period: EvaluationPeriod,
+        subject: String,
+        holidays: List<Holiday> = emptyList(),
+    ): Int {
         if (!period.isValid) return 0
         var hours = 0
         var day = period.startUtc
         while (day <= period.endUtc) {
             val weekday = weekdayOfUtc(day)
-            if (weekday < 5) hours += Timetable.hoursOn(weekday, subject)
+            if (weekday < 5 && holidays.none { day in it }) hours += Timetable.hoursOn(weekday, subject)
             day += DAY_MS
         }
         return hours
+    }
+
+    /** Días lectivos (de lunes a viernes) del periodo que caen en algún festivo. */
+    fun schoolDaysLost(period: EvaluationPeriod, holidays: List<Holiday>): Int {
+        if (!period.isValid || holidays.isEmpty()) return 0
+        var count = 0
+        var day = period.startUtc
+        while (day <= period.endUtc) {
+            if (weekdayOfUtc(day) < 5 && holidays.any { day in it }) count++
+            day += DAY_MS
+        }
+        return count
     }
 
     fun progress(period: EvaluationPeriod, todayUtc: Long): PeriodProgress {
@@ -83,8 +105,9 @@ object AttendanceMath {
         tardies: Int,
         period: EvaluationPeriod?,
         limitPercent: Float,
+        holidays: List<Holiday> = emptyList(),
     ): SubjectAttendance {
-        val totalHours = period?.let { classHoursInPeriod(it, code) } ?: 0
+        val totalHours = period?.let { classHoursInPeriod(it, code, holidays) } ?: 0
         val percentage = if (totalHours > 0) absences * 100f / totalHours else 0f
         val allowed = if (totalHours > 0) floor(totalHours * limitPercent / 100f).toInt() else 0
         val risk = if (totalHours > 0) riskFor(percentage, limitPercent) else RiskLevel.SAFE

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,17 +21,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.EventBusy
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,7 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,79 +46,56 @@ import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
 import com.julen.clases.data.AttendanceMath
 import com.julen.clases.data.EntryType
-import com.julen.clases.data.HistoryEntry
+import com.julen.clases.data.Timetable
 import com.julen.clases.data.SubjectAttendance
 import com.julen.clases.data.Subjects
+import com.julen.clases.ui.Navigator
 import com.julen.clases.ui.ShowMessage
-import com.julen.clases.ui.capitalized
 import com.julen.clases.ui.components.AppCard
-import com.julen.clases.ui.components.EmptyState
+import com.julen.clases.ui.components.GradientCard
 import com.julen.clases.ui.components.PeriodPickerDialog
 import com.julen.clases.ui.components.Pill
 import com.julen.clases.ui.components.ProgressTrack
+import com.julen.clases.ui.components.RingProgress
 import com.julen.clases.ui.components.ScreenHeader
+import com.julen.clases.ui.components.SectionHeader
 import com.julen.clases.ui.components.SectionLabel
 import com.julen.clases.ui.components.SubjectBadge
 import com.julen.clases.ui.formatDateUtc
-import com.julen.clases.ui.formatLocal
+import com.julen.clases.ui.formatPercent
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.theme.AppColors
 import com.julen.clases.ui.theme.color
 import com.julen.clases.ui.theme.label
+import com.julen.clases.ui.theme.subjectColor
+import java.util.Calendar
 
-internal fun registerAbsence(viewModel: AppViewModel, subject: String, showMessage: ShowMessage) {
-    viewModel.addAbsence(subject)
-    showMessage("Falta añadida en $subject", "Deshacer") { viewModel.removeAbsence(subject) }
-}
-
-internal fun registerTardy(viewModel: AppViewModel, subject: String, showMessage: ShowMessage) {
-    val result = viewModel.addTardy(subject)
-    val message = if (result.convertedToAbsence) {
-        "${AttendanceMath.TARDIES_PER_ABSENCE} retrasos en $subject: se suma 1 falta"
-    } else {
-        "Retraso añadido en $subject"
-    }
-    showMessage(message, "Deshacer") { viewModel.undoTardy(subject, result) }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AttendanceScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessage) {
+fun AttendanceScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, showMessage: ShowMessage) {
     var showPeriodPicker by remember { mutableStateOf(false) }
-    var historySubject by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            ScreenHeader(
-                title = "Asistencia",
-                subtitle = "Límite de faltas: ${state.absenceLimit.toInt()}%",
-            )
-            PeriodCard(state = state, onConfigure = { showPeriodPicker = true })
+        item { ScreenHeader(title = "Asistencia", subtitle = "Límite ${state.absenceLimit.toInt()}% por asignatura") }
+        item { OverviewCard(state, onConfigure = { showPeriodPicker = true }) }
+        if (state.history.any { it.type == EntryType.ABSENCE }) {
+            item { StatsCard(state) }
         }
-
         item {
-            SectionLabel("Asignaturas") {
-                Text(
-                    "${plural(state.totalAbsences, "falta")} · ${plural(state.totalTardies, "retraso")}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            SectionHeader("Asignaturas · de más a menos faltas")
         }
-
-        items(state.subjects, key = { it.code }) { subject ->
+        items(state.subjects.sortedByDescending { it.percentage }, key = { it.code }) { subject ->
             SubjectAttendanceCard(
                 subject = subject,
                 hasPeriod = state.period != null,
+                onOpen = { navigator.openSubject(subject.code) },
                 onAddAbsence = { registerAbsence(viewModel, subject.code, showMessage) },
                 onRemoveAbsence = { viewModel.removeAbsence(subject.code) },
                 onAddTardy = { registerTardy(viewModel, subject.code, showMessage) },
                 onRemoveTardy = { viewModel.removeTardy(subject.code) },
-                onShowHistory = { historySubject = subject.code },
             )
         }
     }
@@ -138,54 +111,70 @@ fun AttendanceScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowM
             },
         )
     }
-
-    historySubject?.let { code ->
-        ModalBottomSheet(onDismissRequest = { historySubject = null }) {
-            HistorySheet(code = code, entries = state.history.filter { it.subject == code })
-        }
-    }
 }
 
 @Composable
-private fun PeriodCard(state: UiState, onConfigure: () -> Unit) {
+private fun OverviewCard(state: UiState, onConfigure: () -> Unit) {
     val period = state.period
-    AppCard {
+    val attendance = state.overallAttendance
+    val white = Color.White
+    GradientCard(colors = if (state.subjectsAtRisk.isEmpty()) AppColors.SuccessGradient else AppColors.HeroGradient) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "PERIODO DE EVALUACIÓN",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    if (period != null) {
-                        "${formatDateUtc(period.startUtc)} – ${formatDateUtc(period.endUtc)}"
-                    } else {
-                        "Sin configurar"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (period != null) MaterialTheme.colorScheme.onSurface else AppColors.Warning,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                state.periodProgress?.let {
+            RingProgress(
+                progress = (attendance ?: 0f) / 100f,
+                color = white,
+                trackColor = white.copy(alpha = 0.2f),
+                size = 104.dp,
+                strokeWidth = 11.dp,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "Quedan ${plural(it.remainingDays, "día")}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        attendance?.let { formatPercent(it) } ?: "—",
+                        color = white,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
                     )
+                    Text("asistencia", color = white.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
                 }
             }
-            FilledTonalButton(onClick = onConfigure, shape = RoundedCornerShape(14.dp)) {
-                Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(18.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OverviewLine("Faltas", state.totalAbsences.toString())
+                OverviewLine("Retrasos", state.totalTardies.toString())
+                OverviewLine("En riesgo", state.subjectsAtRisk.size.toString())
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(white.copy(alpha = 0.12f))
+                .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("PERIODO", color = white.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall)
+                Text(
+                    if (period != null) "${formatDateUtc(period.startUtc, "d MMM")} – ${formatDateUtc(period.endUtc, "d MMM yyyy")}" else "Sin configurar",
+                    color = white,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                state.periodProgress?.let {
+                    Text("Quedan ${plural(it.remainingDays, "día")}", color = white.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            FilledTonalButton(onClick = onConfigure, shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(if (period == null) "Elegir" else "Cambiar")
             }
         }
         if (period == null) {
             Text(
-                "Sin fechas no se puede calcular el porcentaje de faltas. Las horas se cuentan según tu horario real.",
+                "Sin fechas no se puede calcular el porcentaje. Las horas se cuentan según tu horario real, descontando festivos.",
+                color = white.copy(alpha = 0.8f),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 10.dp),
             )
         }
@@ -193,22 +182,31 @@ private fun PeriodCard(state: UiState, onConfigure: () -> Unit) {
 }
 
 @Composable
+private fun OverviewLine(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(value, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
 private fun SubjectAttendanceCard(
     subject: SubjectAttendance,
     hasPeriod: Boolean,
+    onOpen: () -> Unit,
     onAddAbsence: () -> Unit,
     onRemoveAbsence: () -> Unit,
     onAddTardy: () -> Unit,
     onRemoveTardy: () -> Unit,
-    onShowHistory: () -> Unit,
 ) {
     val riskColor by animateColorAsState(subject.risk.color(), label = "risk")
-    val usage = if (subject.allowedAbsences > 0) {
-        subject.absences.toFloat() / subject.allowedAbsences
-    } else if (subject.absences > 0 && hasPeriod) 1f else 0f
-    val animatedUsage by animateFloatAsState(usage.coerceIn(0f, 1f), label = "usage")
+    val usage = when {
+        subject.allowedAbsences > 0 -> subject.absences.toFloat() / subject.allowedAbsences
+        subject.absences > 0 && hasPeriod -> 1f
+        else -> 0f
+    }
 
-    AppCard {
+    AppCard(onClick = onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SubjectBadge(subject.code)
             Spacer(Modifier.width(12.dp))
@@ -220,35 +218,29 @@ private fun SubjectAttendanceCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
-                if (hasPeriod) {
-                    Pill(subject.risk.label(), riskColor)
-                } else {
-                    Pill("Sin periodo", MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                if (hasPeriod) Pill(subject.risk.label(), riskColor) else Pill("Sin periodo", MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (hasPeriod) {
-                Text(
-                    "${"%.1f".format(subject.percentage)}%",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Black,
-                    color = riskColor,
-                )
-            }
-            IconButton(onClick = onShowHistory) {
-                Icon(Icons.Filled.History, contentDescription = "Historial de ${subject.code}")
+                RingProgress(progress = usage, color = riskColor, size = 52.dp, strokeWidth = 6.dp) {
+                    Text(
+                        formatPercent(subject.percentage),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
 
         if (hasPeriod) {
             Spacer(Modifier.height(12.dp))
-            ProgressTrack(fraction = animatedUsage, color = riskColor)
+            ProgressTrack(fraction = usage, color = riskColor, height = 6.dp)
             Spacer(Modifier.height(6.dp))
             Text(
                 when {
                     subject.remainingAbsences < 0 ->
-                        "Has superado el límite en ${plural(-subject.remainingAbsences, "falta")} (máx. ${subject.allowedAbsences} de ${subject.totalHours} h)"
+                        "Límite superado en ${plural(-subject.remainingAbsences, "falta")} · máx. ${subject.allowedAbsences} de ${subject.totalHours} h"
                     subject.remainingAbsences == 0 ->
-                        "No te quedan faltas: estás en el límite (${subject.allowedAbsences} de ${subject.totalHours} h)"
+                        "Estás en el límite · máx. ${subject.allowedAbsences} de ${subject.totalHours} h"
                     else ->
                         "Te quedan ${plural(subject.remainingAbsences, "falta")} · máx. ${subject.allowedAbsences} de ${subject.totalHours} h"
                 },
@@ -282,7 +274,7 @@ private fun SubjectAttendanceCard(
 }
 
 @Composable
-private fun Counter(
+internal fun Counter(
     label: String,
     value: String,
     onDecrement: () -> Unit,
@@ -291,6 +283,7 @@ private fun Counter(
     subjectCode: String,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
     Column(modifier = modifier) {
         Text(
             label.uppercase(),
@@ -301,8 +294,8 @@ private fun Counter(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(46.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .height(48.dp)
+                .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -310,7 +303,10 @@ private fun Counter(
                 icon = Icons.Filled.Remove,
                 contentDescription = "Quitar ${label.lowercase()} en $subjectCode",
                 enabled = decrementEnabled,
-                onClick = onDecrement,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onDecrement()
+                },
                 modifier = Modifier.weight(1f),
             )
             Text(
@@ -323,7 +319,10 @@ private fun Counter(
                 icon = Icons.Filled.Add,
                 contentDescription = "Añadir ${label.lowercase()} en $subjectCode",
                 enabled = true,
-                onClick = onIncrement,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onIncrement()
+                },
                 modifier = Modifier.weight(1f),
                 highlighted = true,
             )
@@ -355,64 +354,80 @@ private fun CounterButton(
     }
 }
 
+/** Estadísticas: faltas por día de la semana y por asignatura. */
 @Composable
-private fun HistorySheet(code: String, entries: List<HistoryEntry>) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SubjectBadge(code, size = 40.dp)
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text("Historial", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    Subjects.nameOf(code),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+private fun StatsCard(state: UiState) {
+    val absences = state.history.filter { it.type == EntryType.ABSENCE }
+    val byWeekday = IntArray(5)
+    absences.forEach { entry ->
+        val cal = Calendar.getInstance().apply { timeInMillis = entry.timestamp }
+        val weekday = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        if (weekday < 5) byWeekday[weekday]++
+    }
+    val maxDay = (byWeekday.maxOrNull() ?: 0).coerceAtLeast(1)
+    val worstDay = byWeekday.indices.maxByOrNull { byWeekday[it] }
+    val bySubject = state.subjects.filter { it.absences > 0 }.sortedByDescending { it.absences }
+    val maxSubject = (bySubject.maxOfOrNull { it.absences } ?: 0).coerceAtLeast(1)
+
+    AppCard {
+        SectionLabel("Estadísticas")
+        Text("Faltas por día", style = MaterialTheme.typography.titleSmall)
+        if (worstDay != null && byWeekday[worstDay] > 0) {
+            Text(
+                "Los ${Timetable.dayNames[worstDay].lowercase()} es cuando más faltas",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.height(12.dp))
-        if (entries.isEmpty()) {
-            EmptyState(
-                title = "Sin registros",
-                message = "Aquí aparecerán la fecha y hora de cada falta o retraso que anotes.",
-            )
-        } else {
-            LazyColumn {
-                items(entries) { entry ->
-                    Row(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val isAbsence = entry.type == EntryType.ABSENCE
-                        Icon(
-                            if (isAbsence) Icons.Filled.EventBusy else Icons.Filled.Timer,
-                            contentDescription = null,
-                            tint = if (isAbsence) AppColors.Danger else AppColors.Warning,
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                when {
-                                    entry.fromTardies -> "Falta (por ${AttendanceMath.TARDIES_PER_ABSENCE} retrasos)"
-                                    isAbsence -> "Falta"
-                                    else -> "Retraso"
-                                },
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                formatLocal(entry.timestamp, "EEEE d MMM yyyy · HH:mm").capitalized(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            byWeekday.forEachIndexed { day, count ->
+                val fraction by animateFloatAsState(count.toFloat() / maxDay, label = "bar")
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height((80 * fraction).dp.coerceAtLeast(4.dp))
+                            .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
+                            .background(
+                                if (day == worstDay && count > 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            ),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(Timetable.dayShortNames[day], style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+        if (bySubject.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Text("Faltas por asignatura", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(8.dp))
+            bySubject.forEach { subject ->
+                Row(modifier = Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(subject.code, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(56.dp))
+                    ProgressTrack(
+                        fraction = subject.absences.toFloat() / maxSubject,
+                        color = subjectColor(subject.code),
+                        height = 10.dp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        subject.absences.toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(start = 10.dp).width(24.dp),
+                    )
                 }
             }
         }

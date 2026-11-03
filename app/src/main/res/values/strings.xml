@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Horario de Clases</string>
+    <string name="widget_name">Clase actual</string>
+    <string name="widget_description">Clase actual, siguiente clase y próximo examen</string>
 </resources>
