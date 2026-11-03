@@ -16,9 +16,10 @@ android {
         applicationId = "com.julen.clases"
         minSdk = 24
         targetSdk = 37
-        versionCode = 2
+        // El workflow de releases lo calcula desde la etiqueta (v3.1.2 -> 30102).
+        versionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull() ?: 30000
         // El workflow de releases puede fijarlo desde la etiqueta (-PversionName=2.1).
-        versionName = providers.gradleProperty("versionName").orNull ?: "2.0"
+        versionName = providers.gradleProperty("versionName").orNull ?: "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

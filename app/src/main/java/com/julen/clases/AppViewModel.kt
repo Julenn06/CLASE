@@ -1,12 +1,17 @@
 package com.julen.clases
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.julen.clases.data.AttendanceMath
 import com.julen.clases.data.AttendanceRepository
 import com.julen.clases.data.EvaluationPeriod
+import com.julen.clases.data.Grade
+import com.julen.clases.data.GradeMath
+import com.julen.clases.data.GradeSummary
 import com.julen.clases.data.HistoryEntry
+import com.julen.clases.data.Holiday
 import com.julen.clases.data.NowStatus
 import com.julen.clases.data.PeriodProgress
 import com.julen.clases.data.RiskLevel
@@ -14,6 +19,7 @@ import com.julen.clases.data.SubjectAttendance
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.TardyResult
 import com.julen.clases.data.Task
+import com.julen.clases.data.TaskKind
 import com.julen.clases.data.ThemeMode
 import com.julen.clases.data.Timetable
 import kotlinx.coroutines.delay
@@ -28,6 +34,7 @@ data class UiState(
     val nowMillis: Long = System.currentTimeMillis(),
     /** Día lectivo actual (0 = lunes … 4 = viernes) o null en fin de semana. */
     val today: Int? = null,
+    val minuteOfDay: Int = 0,
     val nowStatus: NowStatus = NowStatus.NoClasses(NowStatus.Reason.WEEKEND, 0, null),
     val period: EvaluationPeriod? = null,
     val periodProgress: PeriodProgress? = null,
@@ -35,20 +42,43 @@ data class UiState(
     val subjects: List<SubjectAttendance> = emptyList(),
     val history: List<HistoryEntry> = emptyList(),
     val tasks: List<Task> = emptyList(),
+    val grades: List<Grade> = emptyList(),
+    val gradeSummaries: List<GradeSummary> = emptyList(),
+    val holidays: List<Holiday> = emptyList(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val userName: String = "",
+    val onboarded: Boolean = true,
 ) {
+    val todayUtc: Long get() = AttendanceMath.todayUtc(nowMillis)
     val totalAbsences: Int get() = subjects.sumOf { it.absences }
     val totalTardies: Int get() = subjects.sumOf { it.tardies }
     val subjectsAtRisk: List<SubjectAttendance> get() = subjects.filter { it.risk != RiskLevel.SAFE }
     val pendingTasks: List<Task> get() = tasks.filter { !it.done }
-    val todayUtc: Long get() = AttendanceMath.todayUtc(nowMillis)
+    val overallAverage: Float? get() = GradeMath.overallAverage(gradeSummaries)
+
+    /** Asistencia global ponderada por horas, o null si no hay periodo. */
+    val overallAttendance: Float?
+        get() {
+            val hours = subjects.sumOf { it.totalHours }
+            if (hours <= 0) return null
+            return (100f - totalAbsences * 100f / hours).coerceIn(0f, 100f)
+        }
+
+    /** Próximo examen o entrega pendiente (hoy o en el futuro). */
+    val nextExam: Task?
+        get() = tasks
+            .filter { !it.done && it.kind != TaskKind.TASK && it.dueUtc != null && it.dueUtc >= todayUtc }
+            .minByOrNull { it.dueUtc ?: Long.MAX_VALUE }
+
+    val isHolidayToday: Holiday? get() = holidays.firstOrNull { todayUtc in it }
 
     fun attendanceOf(code: String): SubjectAttendance? = subjects.firstOrNull { it.code == code }
+    fun gradesOf(code: String): GradeSummary? = gradeSummaries.firstOrNull { it.subject == code }
 }
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repo = AttendanceRepository(application)
+    private val repo = AttendanceRepository(application).also { it.migrateOnboarding() }
 
     private val _uiState = MutableStateFlow(buildState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -72,11 +102,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val now = System.currentTimeMillis()
         val cal = Calendar.getInstance().apply { timeInMillis = now }
         val weekday = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
-        val today = weekday.takeIf { it < 5 }
+        val holidays = repo.getHolidays().sortedBy { it.startUtc }
+        val todayUtc = AttendanceMath.todayUtc(now)
+        val isHoliday = holidays.any { todayUtc in it }
+        val today = weekday.takeIf { it < 5 && !isHoliday }
         val minute = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
 
         val period = repo.getPeriod()?.takeIf { it.isValid }
         val limit = repo.getAbsenceLimit()
+        val grades = repo.getGrades()
 
         val subjects = Subjects.codes.map { code ->
             AttendanceMath.subjectAttendance(
@@ -85,34 +119,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 tardies = repo.getTardies(code),
                 period = period,
                 limitPercent = limit,
+                holidays = holidays,
             )
         }
 
         return UiState(
             nowMillis = now,
             today = today,
+            minuteOfDay = minute,
             nowStatus = Timetable.statusAt(today, minute),
             period = period,
-            periodProgress = period?.let { AttendanceMath.progress(it, AttendanceMath.todayUtc(now)) },
+            periodProgress = period?.let { AttendanceMath.progress(it, todayUtc) },
             absenceLimit = limit,
             subjects = subjects,
             history = repo.getHistory().sortedByDescending { it.timestamp },
             tasks = repo.getTasks(),
+            grades = grades,
+            gradeSummaries = GradeMath.summaries(grades),
+            holidays = holidays,
             themeMode = repo.getThemeMode(),
+            userName = repo.getUserName(),
+            onboarded = repo.isOnboarded(),
         )
+    }
+
+    private inline fun update(block: AttendanceRepository.() -> Unit) {
+        repo.block()
+        refresh()
     }
 
     // ---------- Asistencia ----------
 
-    fun addAbsence(subject: String) {
-        repo.addAbsence(subject)
-        refresh()
-    }
-
-    fun removeAbsence(subject: String) {
-        repo.removeAbsence(subject)
-        refresh()
-    }
+    fun addAbsence(subject: String) = update { addAbsence(subject) }
+    fun removeAbsence(subject: String) = update { removeAbsence(subject) }
+    fun removeTardy(subject: String) = update { removeTardy(subject) }
+    fun undoTardy(subject: String, result: TardyResult) = update { undoTardy(subject, result) }
 
     fun addTardy(subject: String): TardyResult {
         val result = repo.addTardy(subject)
@@ -120,19 +161,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return result
     }
 
-    fun removeTardy(subject: String) {
-        repo.removeTardy(subject)
-        refresh()
+    fun savePeriod(startUtc: Long, endUtc: Long) = update { savePeriod(startUtc, endUtc) }
+
+    // ---------- Festivos ----------
+
+    fun addHoliday(name: String, startUtc: Long, endUtc: Long) = update {
+        saveHolidays(getHolidays() + Holiday(System.currentTimeMillis(), name.trim(), startUtc, endUtc))
     }
 
-    fun undoTardy(subject: String, result: TardyResult) {
-        repo.undoTardy(subject, result)
-        refresh()
-    }
+    fun deleteHoliday(id: Long) = update { saveHolidays(getHolidays().filterNot { it.id == id }) }
 
-    fun savePeriod(startUtc: Long, endUtc: Long) {
-        repo.savePeriod(startUtc, endUtc)
-        refresh()
+    fun restoreHoliday(holiday: Holiday) = update {
+        saveHolidays(getHolidays().filterNot { it.id == holiday.id } + holiday)
     }
 
     // ---------- Apuntes ----------
@@ -141,56 +181,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveNote(subject: String, note: String) = repo.saveNote(subject, note)
 
-    fun subjectsWithNotes(): Set<String> =
-        Subjects.codes.filter { repo.getNote(it).isNotBlank() }.toSet()
-
     // ---------- Tareas ----------
 
-    fun addTask(subject: String, title: String, dueUtc: Long?) {
-        val task = Task(System.currentTimeMillis(), subject, title.trim(), dueUtc)
-        repo.saveTasks(repo.getTasks() + task)
-        refresh()
+    fun addTask(subject: String, title: String, dueUtc: Long?, kind: TaskKind) = update {
+        saveTasks(getTasks() + Task(System.currentTimeMillis(), subject, title.trim(), dueUtc, kind = kind))
     }
 
-    fun toggleTask(id: Long) {
-        repo.saveTasks(repo.getTasks().map { if (it.id == id) it.copy(done = !it.done) else it })
-        refresh()
+    fun toggleTask(id: Long) = update {
+        saveTasks(getTasks().map { if (it.id == id) it.copy(done = !it.done) else it })
     }
 
-    fun deleteTask(id: Long) {
-        repo.saveTasks(repo.getTasks().filterNot { it.id == id })
-        refresh()
+    fun deleteTask(id: Long) = update { saveTasks(getTasks().filterNot { it.id == id }) }
+
+    fun restoreTasks(tasks: List<Task>) = update {
+        val ids = tasks.map { it.id }.toSet()
+        saveTasks(getTasks().filterNot { it.id in ids } + tasks)
     }
 
-    fun restoreTask(task: Task) {
-        repo.saveTasks(repo.getTasks().filterNot { it.id == task.id } + task)
-        refresh()
+    fun clearCompletedTasks() = update { saveTasks(getTasks().filterNot { it.done }) }
+
+    // ---------- Calificaciones ----------
+
+    fun addGrade(subject: String, title: String, score: Float, weight: Float, dateUtc: Long?) = update {
+        saveGrades(getGrades() + Grade(System.currentTimeMillis(), subject, title.trim(), score, weight, dateUtc))
     }
 
-    fun clearCompletedTasks() {
-        repo.saveTasks(repo.getTasks().filterNot { it.done })
-        refresh()
+    fun deleteGrade(id: Long) = update { saveGrades(getGrades().filterNot { it.id == id }) }
+
+    fun restoreGrade(grade: Grade) = update {
+        saveGrades(getGrades().filterNot { it.id == grade.id } + grade)
     }
 
     // ---------- Ajustes ----------
 
-    fun setAbsenceLimit(value: Float) {
-        repo.setAbsenceLimit(value)
-        refresh()
-    }
+    fun setAbsenceLimit(value: Float) = update { setAbsenceLimit(value) }
+    fun setThemeMode(mode: ThemeMode) = update { setThemeMode(mode) }
+    fun setUserName(name: String) = update { setUserName(name) }
+    fun completeOnboarding() = update { setOnboarded() }
+    fun resetAttendance() = update { resetAttendance() }
+    fun resetAll() = update { resetAll() }
 
-    fun setThemeMode(mode: ThemeMode) {
-        repo.setThemeMode(mode)
-        refresh()
-    }
+    // ---------- Copia de seguridad ----------
 
-    fun resetAttendance() {
-        repo.resetAttendance()
-        refresh()
-    }
+    fun exportBackup(uri: Uri): Boolean = runCatching {
+        val json = repo.exportBackup()
+        getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { out ->
+            out.write(json.toByteArray(Charsets.UTF_8))
+        } ?: error("No se pudo abrir el archivo")
+    }.isSuccess
 
-    fun resetAll() {
-        repo.resetAll()
+    fun importBackup(uri: Uri): Boolean {
+        val text = runCatching {
+            getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                input.readBytes().toString(Charsets.UTF_8)
+            }
+        }.getOrNull() ?: return false
+        val ok = repo.importBackup(text)
         refresh()
+        return ok
     }
 }

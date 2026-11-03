@@ -1,5 +1,6 @@
 package com.julen.clases.ui.screens
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,17 +14,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,23 +42,19 @@ import com.julen.clases.UiState
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.Timetable
 import com.julen.clases.data.formatMinutes
+import com.julen.clases.ui.Navigator
 import com.julen.clases.ui.components.AppCard
 import com.julen.clases.ui.components.ScreenHeader
-import com.julen.clases.ui.components.SectionLabel
+import com.julen.clases.ui.components.SectionHeader
+import com.julen.clases.ui.components.SegmentedControl
 import com.julen.clases.ui.components.SubjectBadge
 import com.julen.clases.ui.durationText
 import com.julen.clases.ui.theme.subjectColor
-import java.util.Calendar
 
 @Composable
-fun ScheduleScreen(state: UiState) {
-    var weekView by rememberSaveable { mutableStateOf(false) }
+fun ScheduleScreen(state: UiState, navigator: Navigator) {
+    var mode by rememberSaveable { mutableIntStateOf(0) }
     var selectedDay by rememberSaveable { mutableIntStateOf(state.today ?: 0) }
-    val minute = remember(state.nowMillis) {
-        Calendar.getInstance().apply { timeInMillis = state.nowMillis }.let {
-            it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE)
-        }
-    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -64,13 +63,14 @@ fun ScheduleScreen(state: UiState) {
     ) {
         item {
             ScreenHeader(title = "Horario", subtitle = "Semana lectiva")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = !weekView, onClick = { weekView = false }, label = { Text("Por día") })
-                FilterChip(selected = weekView, onClick = { weekView = true }, label = { Text("Semana") })
-            }
+            SegmentedControl(
+                options = listOf("Por día", "Semana"),
+                selectedIndex = mode,
+                onSelect = { mode = it },
+            )
         }
 
-        if (!weekView) {
+        if (mode == 0) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -79,6 +79,7 @@ fun ScheduleScreen(state: UiState) {
                     Timetable.dayShortNames.forEachIndexed { index, short ->
                         DayChip(
                             text = short,
+                            hours = Timetable.blocksFor(index).filter { !it.isBreak }.sumOf { it.durationMinutes } / 60,
                             selected = index == selectedDay,
                             isToday = index == state.today,
                             onClick = { selectedDay = index },
@@ -89,47 +90,58 @@ fun ScheduleScreen(state: UiState) {
             }
             item {
                 val blocks = Timetable.blocksFor(selectedDay)
-                val hours = blocks.filter { !it.isBreak }.sumOf { it.durationMinutes } / 60
-                AppCard {
-                    SectionLabel(Timetable.dayNames[selectedDay]) {
+                AppCard(contentPadding = 14.dp) {
+                    Row(
+                        modifier = Modifier.padding(start = 6.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(Timetable.dayNames[selectedDay], style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                         Text(
-                            "${formatMinutes(blocks.first().start)} – ${formatMinutes(blocks.last().end)} · $hours h",
+                            "${formatMinutes(blocks.first().start)} – ${formatMinutes(blocks.last().end)}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     blocks.forEach { block ->
-                        TimelineRow(block = block, minuteOfDay = if (selectedDay == state.today) minute else null)
+                        TimelineRow(
+                            block = block,
+                            minuteOfDay = if (selectedDay == state.today) state.minuteOfDay else null,
+                            onOpenSubject = navigator.openSubject,
+                        )
                     }
                 }
             }
         } else {
-            item { WeekGrid(today = state.today, minuteOfDay = minute) }
+            item { WeekGrid(today = state.today, minuteOfDay = state.minuteOfDay, onOpenSubject = navigator.openSubject) }
         }
 
-        item {
-            AppCard {
-                SectionLabel("Asignaturas")
-                Subjects.all.forEach { subject ->
-                    Row(
-                        modifier = Modifier.padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        SubjectBadge(subject.code, size = 40.dp)
-                        Spacer(Modifier.width(12.dp))
+        item { SectionHeader("Asignaturas") }
+        items(Subjects.all, key = { it.code }) { subject ->
+            AppCard(onClick = { navigator.openSubject(subject.code) }, contentPadding = 14.dp) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SubjectBadge(subject.code, size = 42.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             subject.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 2,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            "${Timetable.weeklyHours(subject.code)} h/sem",
-                            style = MaterialTheme.typography.labelLarge,
+                            Timetable.dayShortNames.indices
+                                .filter { Timetable.hoursOn(it, subject.code) > 0 }
+                                .joinToString(" · ") { Timetable.dayNames[it].take(3) },
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Text(
+                        "${Timetable.weeklyHours(subject.code)} h",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = subjectColor(subject.code),
+                    )
+                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -139,32 +151,31 @@ fun ScheduleScreen(state: UiState) {
 @Composable
 private fun DayChip(
     text: String,
+    hours: Int,
     selected: Boolean,
     isToday: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val background by animateColorAsState(if (selected) scheme.primary else scheme.surfaceContainerLow, label = "day")
+    val content by animateColorAsState(if (selected) scheme.onPrimary else scheme.onSurface, label = "dayText")
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) scheme.primary else scheme.surfaceContainerLow)
+            .clip(RoundedCornerShape(18.dp))
+            .background(background)
+            .border(1.dp, if (selected) Color.Transparent else scheme.outlineVariant, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.ExtraBold,
-            color = if (selected) scheme.onPrimary else scheme.onSurface,
-        )
+        Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = content)
+        Text("$hours h", style = MaterialTheme.typography.labelSmall, color = content.copy(alpha = 0.7f))
         Box(
             modifier = Modifier
-                .padding(top = 4.dp)
-                .width(16.dp)
-                .height(3.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .padding(top = 6.dp)
+                .size(5.dp)
+                .clip(RoundedCornerShape(50))
                 .background(
                     when {
                         !isToday -> Color.Transparent
@@ -177,10 +188,10 @@ private fun DayChip(
 }
 
 @Composable
-private fun WeekGrid(today: Int?, minuteOfDay: Int) {
+private fun WeekGrid(today: Int?, minuteOfDay: Int, onOpenSubject: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     AppCard(contentPadding = 12.dp) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Spacer(Modifier.width(40.dp))
             Timetable.dayShortNames.forEachIndexed { index, day ->
                 Text(
@@ -193,11 +204,11 @@ private fun WeekGrid(today: Int?, minuteOfDay: Int) {
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Spacer(Modifier.height(8.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Timetable.slots.forEachIndexed { slotIndex, slot ->
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -211,7 +222,7 @@ private fun WeekGrid(today: Int?, minuteOfDay: Int) {
                             modifier = Modifier
                                 .weight(1f)
                                 .height(26.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(9.dp))
                                 .background(scheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -229,17 +240,15 @@ private fun WeekGrid(today: Int?, minuteOfDay: Int) {
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(color.copy(alpha = 0.16f))
-                                    .then(
-                                        if (isNow) Modifier.border(2.dp, color, RoundedCornerShape(10.dp)) else Modifier
-                                    ),
+                                    .height(50.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isNow) color else color.copy(alpha = 0.15f))
+                                    .clickable(enabled = subject != null) { subject?.let(onOpenSubject) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     subject.orEmpty(),
-                                    color = color,
+                                    color = if (isNow) Color.White else color,
                                     fontWeight = FontWeight.Black,
                                     fontSize = if ((subject?.length ?: 0) > 4) 10.sp else 12.sp,
                                     maxLines = 1,
