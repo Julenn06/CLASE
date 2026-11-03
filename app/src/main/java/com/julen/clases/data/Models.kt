@@ -49,5 +49,15 @@ data class Holiday(
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** Color de acento de la interfaz. */
+enum class AccentColor(val label: String) {
+    INDIGO("Índigo"),
+    VIOLET("Violeta"),
+    OCEAN("Océano"),
+    EMERALD("Esmeralda"),
+    SUNSET("Atardecer"),
+    ROSE("Rosa"),
+}
+
 /** Resultado de añadir un retraso: indica si se ha convertido en falta. */
 data class TardyResult(val convertedToAbsence: Boolean)

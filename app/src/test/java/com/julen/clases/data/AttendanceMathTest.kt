@@ -94,4 +94,15 @@ class AttendanceMathTest {
         assertEquals(3, AttendanceMath.classHoursInPeriod(period, "PMDM", holidays)) // pierde el martes
         assertEquals(2, AttendanceMath.schoolDaysLost(period, holidays))
     }
+
+    @Test
+    fun streakCountsSchoolDaysSinceLastAbsence() {
+        val madrid = TimeZone.getTimeZone("Europe/Madrid")
+        val absenceFriday = AttendanceMath.localNoonOf(utc(2026, 10, 30), madrid)
+        // Viernes 30 oct → martes 3 nov: cuentan lunes y martes.
+        assertEquals(2, AttendanceMath.schoolDaysWithoutAbsence(listOf(absenceFriday), utc(2026, 11, 3), emptyList(), madrid))
+        val holiday = Holiday(1, "Puente", utc(2026, 11, 2), utc(2026, 11, 2))
+        assertEquals(1, AttendanceMath.schoolDaysWithoutAbsence(listOf(absenceFriday), utc(2026, 11, 3), listOf(holiday), madrid))
+        assertEquals(null, AttendanceMath.schoolDaysWithoutAbsence(emptyList(), utc(2026, 11, 3), emptyList(), madrid))
+    }
 }

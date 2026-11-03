@@ -56,7 +56,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
+import com.julen.clases.data.AttendanceMath
 import com.julen.clases.data.Block
+import com.julen.clases.data.CalendarMath
 import com.julen.clases.data.NowStatus
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.Task
@@ -89,6 +91,7 @@ import com.julen.clases.ui.initialOf
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.relativeDay
 import com.julen.clases.ui.theme.AppColors
+import com.julen.clases.ui.theme.heroGradient
 import com.julen.clases.ui.theme.color
 import com.julen.clases.ui.theme.gradeColor
 import com.julen.clases.ui.theme.subjectColor
@@ -123,6 +126,8 @@ fun HomeScreen(
         }
 
         item { StatsRow(state, navigator) }
+
+        item { WeekStrip(state, onClick = { navigator.openTab(Destination.AGENDA) }) }
 
         if (state.period == null) {
             item { ConfigurePeriodCard(onConfigure = { showPeriodPicker = true }) }
@@ -165,6 +170,7 @@ fun HomeScreen(
     if (showPeriodPicker) {
         PeriodPickerDialog(
             initial = state.period,
+            holidays = state.holidays,
             onDismiss = { showPeriodPicker = false },
             onConfirm = { start, end ->
                 viewModel.savePeriod(start, end)
@@ -189,7 +195,7 @@ private fun HomeHeader(state: UiState, onSettings: () -> Unit) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(AppColors.HeroGradient)),
+                .background(Brush.linearGradient(heroGradient())),
             contentAlignment = Alignment.Center,
         ) {
             Text(initialOf(state.userName), color = Color.White, style = MaterialTheme.typography.titleLarge)
@@ -231,7 +237,7 @@ private fun NowCard(
     val holiday = state.isHolidayToday
     val status = state.nowStatus
 
-    GradientCard(colors = AppColors.HeroGradient) {
+    GradientCard(colors = heroGradient()) {
         when {
             holiday != null -> {
                 HeroLabel("Día no lectivo", Icons.Filled.BeachAccess)
@@ -446,7 +452,7 @@ private fun StatsRow(state: UiState, navigator: Navigator) {
             value = attendance?.let { formatPercent(it) } ?: "—",
             icon = Icons.Filled.TaskAlt,
             accent = AppColors.Safe,
-            caption = plural(state.totalAbsences, "falta"),
+            caption = state.streak?.let { "🔥 ${plural(it, "día", "días")} sin faltar" } ?: plural(state.totalAbsences, "falta"),
             modifier = Modifier.weight(1f),
             onClick = { navigator.openTab(Destination.ATTENDANCE) },
         )
@@ -676,6 +682,55 @@ private fun UpcomingTasks(state: UiState, onToggle: (Task) -> Unit) {
                                     fontWeight = if (overdue) FontWeight.Bold else FontWeight.Normal,
                                 )
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** La semana actual de un vistazo: fecha, horas de clase, festivos y entregas de cada día. */
+@Composable
+private fun WeekStrip(state: UiState, onClick: () -> Unit) {
+    val today = state.todayUtc
+    val monday = today - AttendanceMath.weekdayOfUtc(today).coerceAtMost(6) * AttendanceMath.DAY_MS
+    // En fin de semana se muestra la semana siguiente.
+    val start = if (AttendanceMath.weekdayOfUtc(today) >= 5) monday + 7 * AttendanceMath.DAY_MS else monday
+    AppCard(onClick = onClick, contentPadding = 12.dp) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (offset in 0 until 5) {
+                val day = start + offset * AttendanceMath.DAY_MS
+                val isToday = day == today
+                val isPast = day < today
+                val holiday = state.holidays.any { day in it }
+                val hours = if (holiday) 0 else Timetable.blocksFor(offset).filter { it.subject != null && !it.isBreak }.sumOf { it.durationMinutes } / 60
+                val due = state.tasks.filter { !it.done && it.dueUtc == day }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .alpha(if (isPast) 0.5f else 1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    val fg = if (isToday) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                    Text(Timetable.dayShortNames[offset], style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.75f))
+                    Text(CalendarMath.dayOf(day).toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = fg)
+                    Text(
+                        if (holiday) "Festivo" else "$hours h",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (holiday && !isToday) AppColors.Safe else fg.copy(alpha = 0.75f),
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .height(6.dp),
+                    ) {
+                        due.take(3).forEach { task ->
+                            Dot(if (isToday) MaterialTheme.colorScheme.onPrimary else task.kind.color(), size = 6.dp)
                         }
                     }
                 }

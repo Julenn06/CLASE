@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
 
-            ClasesTheme(darkTheme = darkTheme) {
+            ClasesTheme(darkTheme = darkTheme, accent = state.accent) {
                 ClasesApp(state = state, viewModel = viewModel)
             }
         }

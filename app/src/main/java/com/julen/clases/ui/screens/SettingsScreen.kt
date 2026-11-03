@@ -5,7 +5,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,10 +23,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BeachAccess
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -54,6 +61,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -62,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
+import com.julen.clases.data.AccentColor
 import com.julen.clases.data.AttendanceMath
 import com.julen.clases.data.ThemeMode
 import com.julen.clases.ui.ShowMessage
@@ -73,6 +83,7 @@ import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.formatLocal
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.theme.AppColors
+import com.julen.clases.ui.theme.swatch
 
 private enum class ResetKind { ATTENDANCE, ALL }
 
@@ -297,6 +308,34 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel, onBack: () -> Unit, 
 
             item {
                 SettingsCard(Icons.Filled.Palette, "Apariencia", Color(0xFFDB2777)) {
+                    Text("Color de acento", style = MaterialTheme.typography.labelLarge)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(top = 10.dp, bottom = 6.dp),
+                    ) {
+                        AccentColor.entries.forEach { accent ->
+                            val selected = state.accent == accent
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .clip(CircleShape)
+                                    .background(Brush.linearGradient(accent.swatch()))
+                                    .border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                    .clickable { viewModel.setAccent(accent) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (selected) Icon(Icons.Filled.Check, contentDescription = accent.label, tint = Color.White)
+                            }
+                        }
+                    }
+                    Text(
+                        state.accent.label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                    Text("Tema", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(bottom = 6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ThemeMode.entries.forEach { mode ->
                             FilterChip(
@@ -392,6 +431,7 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel, onBack: () -> Unit, 
     if (showPeriodPicker) {
         PeriodPickerDialog(
             initial = state.period,
+            holidays = state.holidays,
             onDismiss = { showPeriodPicker = false },
             onConfirm = { start, end ->
                 viewModel.savePeriod(start, end)
@@ -548,6 +588,7 @@ private fun HolidayDialog(onDismiss: () -> Unit, onConfirm: (name: String, start
         PeriodPickerDialog(
             initial = null,
             title = "Días no lectivos",
+            showPresets = false,
             onDismiss = { showPicker = false },
             onConfirm = { s, e ->
                 start = s

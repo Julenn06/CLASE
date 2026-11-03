@@ -113,4 +113,34 @@ object AttendanceMath {
         val risk = if (totalHours > 0) riskFor(percentage, limitPercent) else RiskLevel.SAFE
         return SubjectAttendance(code, absences, tardies, totalHours, allowed, percentage, risk)
     }
+
+    /** Instante a las 12:00 locales del día [dateUtc] (para registrar faltas de días pasados). */
+    fun localNoonOf(dateUtc: Long, zone: TimeZone = TimeZone.getDefault()): Long {
+        val date = Calendar.getInstance(utc).apply { timeInMillis = dateUtc }
+        return Calendar.getInstance(zone).apply {
+            clear()
+            set(date.get(Calendar.YEAR), date.get(Calendar.MONTH), date.get(Calendar.DAY_OF_MONTH), 12, 0)
+        }.timeInMillis
+    }
+
+    /**
+     * Días lectivos (lunes a viernes, sin festivos) seguidos sin faltar, contando desde el día
+     * siguiente a la última falta hasta [todayUtc] inclusive. Null si nunca ha faltado.
+     */
+    fun schoolDaysWithoutAbsence(
+        absenceTimestamps: List<Long>,
+        todayUtc: Long,
+        holidays: List<Holiday>,
+        zone: TimeZone = TimeZone.getDefault(),
+    ): Int? {
+        val last = absenceTimestamps.maxOrNull() ?: return null
+        val lastDay = todayUtc(last, zone)
+        var count = 0
+        var day = lastDay + DAY_MS
+        while (day <= todayUtc) {
+            if (weekdayOfUtc(day) < 5 && holidays.none { day in it }) count++
+            day += DAY_MS
+        }
+        return count
+    }
 }

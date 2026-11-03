@@ -38,10 +38,12 @@ import com.julen.clases.data.Subjects
 import com.julen.clases.data.TaskKind
 import com.julen.clases.data.Timetable
 import com.julen.clases.data.formatMinutes
+import com.julen.clases.ui.theme.swatch
 import java.util.Calendar
 
 /** Datos que muestra el widget, calculados en el momento de dibujarlo. */
 private data class WidgetData(
+    val color: Color,
     val label: String,
     val title: String,
     val subtitle: String,
@@ -51,6 +53,7 @@ private data class WidgetData(
 private fun loadWidgetData(context: Context): WidgetData {
     val repo = AttendanceRepository(context)
     Timetable.config = repo.getSchedule() ?: ScheduleConfig.DEFAULT
+    val color = repo.getAccent().swatch().first()
     val now = System.currentTimeMillis()
     val cal = Calendar.getInstance().apply { timeInMillis = now }
     val todayUtc = AttendanceMath.todayUtc(now)
@@ -72,13 +75,14 @@ private fun loadWidgetData(context: Context): WidgetData {
         "${nextExam.kind.label} de ${nextExam.subject} $whenText"
     } ?: "Sin exámenes a la vista"
 
-    if (holiday != null) return WidgetData("DÍA NO LECTIVO", holiday.name, "Hoy no hay clase", footer)
+    if (holiday != null) return WidgetData(color, "DÍA NO LECTIVO", holiday.name, "Hoy no hay clase", footer)
 
     return when (val status = Timetable.statusAt(today, minute)) {
         is NowStatus.InClass -> {
             val code = status.block.subject.orEmpty()
             val next = status.next?.takeIf { !it.isBreak && it.subject != null }
             WidgetData(
+                color = color,
                 label = "AHORA · quedan ${status.minutesLeft} min",
                 title = code,
                 subtitle = Subjects.nameOf(code),
@@ -88,6 +92,7 @@ private fun loadWidgetData(context: Context): WidgetData {
         is NowStatus.OnBreak -> {
             val next = status.next
             WidgetData(
+                color = color,
                 label = if (status.block.isFree) "HORA LIBRE" else "RECREO",
                 title = "${status.minutesLeft} min",
                 subtitle = if (next?.subject != null) "Luego ${next.subject} a las ${formatMinutes(next.start)}" else "",
@@ -95,6 +100,7 @@ private fun loadWidgetData(context: Context): WidgetData {
             )
         }
         is NowStatus.BeforeClasses -> WidgetData(
+            color = color,
             label = "HOY EMPIEZAS CON",
             title = status.first.subject.orEmpty(),
             subtitle = "A las ${formatMinutes(status.first.start)}",
@@ -103,6 +109,7 @@ private fun loadWidgetData(context: Context): WidgetData {
         is NowStatus.NoClasses -> {
             val first = status.firstBlock
             WidgetData(
+                color = color,
                 label = if (status.reason == NowStatus.Reason.WEEKEND) "FIN DE SEMANA" else "CLASES TERMINADAS",
                 title = first?.subject ?: "Libre",
                 subtitle = first?.let { "${Timetable.dayNames[status.nextDay]} a las ${formatMinutes(it.start)}" } ?: "",
@@ -145,7 +152,7 @@ private fun WidgetContent(data: WidgetData) {
         modifier = GlanceModifier
             .fillMaxSize()
             .cornerRadius(24.dp)
-            .background(Color(0xFF4338CA))
+            .background(data.color)
             .clickable(actionStartActivity<MainActivity>())
             .padding(16.dp),
         verticalAlignment = Alignment.Vertical.Top,

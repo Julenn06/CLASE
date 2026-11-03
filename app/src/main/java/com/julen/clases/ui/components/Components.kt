@@ -536,3 +536,53 @@ fun EmptyState(
         )
     }
 }
+
+/**
+ * Gráfica de línea compacta (p. ej. evolución de notas). [maxValue] fija la escala vertical;
+ * [guide] dibuja una línea discontinua de referencia (como el aprobado).
+ */
+@Composable
+fun Sparkline(
+    values: List<Float>,
+    color: Color,
+    modifier: Modifier = Modifier,
+    maxValue: Float = 10f,
+    guide: Float? = null,
+) {
+    if (values.size < 2) return
+    val guideColor = MaterialTheme.colorScheme.outline
+    Canvas(modifier = modifier) {
+        val stepX = size.width / (values.size - 1)
+        fun y(v: Float) = size.height - (v.coerceIn(0f, maxValue) / maxValue) * size.height
+        guide?.let {
+            drawLine(
+                guideColor,
+                Offset(0f, y(it)),
+                Offset(size.width, y(it)),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 8f)),
+            )
+        }
+        val line = androidx.compose.ui.graphics.Path()
+        val fill = androidx.compose.ui.graphics.Path()
+        values.forEachIndexed { i, v ->
+            val x = i * stepX
+            if (i == 0) {
+                line.moveTo(x, y(v))
+                fill.moveTo(x, size.height)
+                fill.lineTo(x, y(v))
+            } else {
+                line.lineTo(x, y(v))
+                fill.lineTo(x, y(v))
+            }
+        }
+        fill.lineTo(size.width, size.height)
+        fill.close()
+        drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.28f), color.copy(alpha = 0f))))
+        drawPath(line, color, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        values.forEachIndexed { i, v ->
+            drawCircle(color, radius = 4.dp.toPx(), center = Offset(i * stepX, y(v)))
+            drawCircle(Color.White, radius = 2.dp.toPx(), center = Offset(i * stepX, y(v)))
+        }
+    }
+}

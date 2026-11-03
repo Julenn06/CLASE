@@ -65,6 +65,7 @@ import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.formatPercent
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.theme.AppColors
+import com.julen.clases.ui.theme.heroGradient
 import com.julen.clases.ui.theme.color
 import com.julen.clases.ui.theme.label
 import com.julen.clases.ui.theme.subjectColor
@@ -103,6 +104,7 @@ fun AttendanceScreen(state: UiState, viewModel: AppViewModel, navigator: Navigat
     if (showPeriodPicker) {
         PeriodPickerDialog(
             initial = state.period,
+            holidays = state.holidays,
             onDismiss = { showPeriodPicker = false },
             onConfirm = { start, end ->
                 viewModel.savePeriod(start, end)
@@ -118,7 +120,7 @@ private fun OverviewCard(state: UiState, onConfigure: () -> Unit) {
     val period = state.period
     val attendance = state.overallAttendance
     val white = Color.White
-    GradientCard(colors = if (state.subjectsAtRisk.isEmpty()) AppColors.SuccessGradient else AppColors.HeroGradient) {
+    GradientCard(colors = if (state.subjectsAtRisk.isEmpty()) AppColors.SuccessGradient else heroGradient()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             RingProgress(
                 progress = (attendance ?: 0f) / 100f,
@@ -142,6 +144,7 @@ private fun OverviewCard(state: UiState, onConfigure: () -> Unit) {
                 OverviewLine("Faltas", state.totalAbsences.toString())
                 OverviewLine("Retrasos", state.totalTardies.toString())
                 OverviewLine("En riesgo", state.subjectsAtRisk.size.toString())
+                state.streak?.let { OverviewLine("Racha 🔥", plural(it, "día", "días")) }
             }
         }
         Spacer(Modifier.height(16.dp))
