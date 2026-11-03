@@ -230,7 +230,7 @@ internal fun TaskEditorSheet(
             )
 
             if (!lockSubject) {
-                SubjectChips(selected = subject, onSelect = { subject = it })
+                SubjectChips(selected = subject, onSelect = { if (it != null) subject = it })
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
