@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Firma de release opcional: solo se activa si el workflow de releases define estas
+// variables (a partir de los secrets del repositorio). Sin ellas, el release se
+// compila sin firmar, como hasta ahora.
+val releaseKeystorePath: String? = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+
 android {
     namespace = "com.julen.clases"
     compileSdk = 37
@@ -12,13 +17,28 @@ android {
         minSdk = 24
         targetSdk = 37
         versionCode = 2
-        versionName = "2.0"
+        // El workflow de releases puede fijarlo desde la etiqueta (-PversionName=2.1).
+        versionName = providers.gradleProperty("versionName").orNull ?: "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+                keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystorePath != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                 enable = false
             }
