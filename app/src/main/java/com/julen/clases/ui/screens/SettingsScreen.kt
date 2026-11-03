@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BeachAccess
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BeachAccess
 import androidx.compose.material.icons.filled.Check
@@ -76,9 +78,10 @@ import com.julen.clases.data.AttendanceMath
 import com.julen.clases.data.ThemeMode
 import com.julen.clases.ui.ShowMessage
 import com.julen.clases.ui.components.AppCard
-import com.julen.clases.ui.components.DetailTopBar
-import com.julen.clases.ui.components.IconBubble
+import com.julen.clases.ui.components.AppScreen
 import com.julen.clases.ui.components.PeriodPickerDialog
+import com.julen.clases.ui.components.SectionTitle
+import com.julen.clases.ui.components.screenPadding
 import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.formatLocal
 import com.julen.clases.ui.plural
@@ -136,14 +139,10 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel, onBack: () -> Unit, 
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "—"
     }
 
-    Column(Modifier.fillMaxSize()) {
-        DetailTopBar(title = "Ajustes", onBack = onBack)
+    AppScreen(title = "Ajustes", onBack = onBack, edgeToEdgeBottom = true) { inner ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .imePadding(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.imePadding(),
+            contentPadding = screenPadding(inner, extraBottom = 32.dp),
         ) {
             item {
                 SettingsCard(Icons.Filled.Person, "Perfil", MaterialTheme.colorScheme.primary) {
@@ -320,7 +319,7 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel, onBack: () -> Unit, 
                                     .weight(1f)
                                     .aspectRatio(1f)
                                     .clip(CircleShape)
-                                    .background(Brush.linearGradient(accent.swatch()))
+                                    .background(accent.swatch().first())
                                     .border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
                                     .clickable { viewModel.setAccent(accent) },
                                 contentAlignment = Alignment.Center,
@@ -455,7 +454,7 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel, onBack: () -> Unit, 
     confirmReset?.let { kind ->
         AlertDialog(
             onDismissRequest = { confirmReset = null },
-            icon = { IconBubble(Icons.Filled.DeleteForever, AppColors.Danger) },
+            icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = AppColors.Danger) },
             title = { Text(if (kind == ResetKind.ALL) "¿Borrar todos los datos?" else "¿Reiniciar asistencia?") },
             text = {
                 Text(
@@ -487,14 +486,10 @@ private fun SettingsCard(
     accent: Color,
     content: @Composable () -> Unit,
 ) {
-    AppCard {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
-            IconBubble(icon, accent, size = 36.dp)
-            Spacer(Modifier.width(12.dp))
-            Text(title, style = MaterialTheme.typography.titleMedium)
-        }
-        content()
-    }
+    // Título de sección y contenido en una superficie tonal; [icon] y [accent] se conservan
+    // en la firma para identificar cada bloque en el código.
+    SectionTitle(title)
+    AppCard { content() }
 }
 
 @Composable
@@ -542,7 +537,7 @@ private fun HolidayDialog(onDismiss: () -> Unit, onConfirm: (name: String, start
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { IconBubble(Icons.Filled.BeachAccess, AppColors.Safe) },
+        icon = { Icon(Icons.Outlined.BeachAccess, contentDescription = null) },
         title = { Text("Días no lectivos") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

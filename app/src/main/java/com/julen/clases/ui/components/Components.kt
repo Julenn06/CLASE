@@ -1,148 +1,136 @@
 package com.julen.clases.ui.components
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.julen.clases.ui.theme.isDark
 import com.julen.clases.ui.theme.subjectColor
 
+/*
+ * Sistema de componentes de la app.
+ *
+ * Criterios (Material 3 + guía nativa de Android):
+ * - Barra superior grande que se contrae al hacer scroll; nada de bloques "hero" con degradado.
+ * - Una sola forma de elevación: superficies tonales (surfaceContainer*) sin borde ni sombra.
+ * - Agrupar por significado con listas y separadores antes que con tarjetas sueltas.
+ * - Radio de 16 dp para grupos, píldora solo para controles pequeños.
+ */
+
 // ---------------------------------------------------------------------------------------------
-// Estructura
+// Estructura de pantalla
 // ---------------------------------------------------------------------------------------------
 
-/** Cabecera grande de cada pestaña. */
+/**
+ * Pantalla con barra superior grande (se contrae al desplazar).
+ * [edgeToEdgeBottom] = true en pantallas superpuestas que llegan hasta la barra de navegación del sistema.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScreenHeader(
+fun AppScreen(
     title: String,
-    subtitle: String? = null,
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
+    floatingActionButton: @Composable () -> Unit = {},
+    edgeToEdgeBottom: Boolean = false,
+    content: @Composable (PaddingValues) -> Unit,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(top = 18.dp, bottom = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            if (subtitle != null) {
-                Text(
-                    text = subtitle.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onBackground,
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    Scaffold(
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = if (edgeToEdgeBottom) WindowInsets.navigationBars else WindowInsets(0, 0, 0, 0),
+        floatingActionButton = floatingActionButton,
+        topBar = {
+            LargeTopAppBar(
+                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        }
+                    }
+                },
+                actions = actions,
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.largeTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                ),
             )
-        }
-        actions()
-    }
+        },
+        content = content,
+    )
 }
 
-/** Barra superior de las pantallas secundarias (con botón atrás). */
-@Composable
-fun DetailTopBar(
-    title: String,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    contentColor: Color = MaterialTheme.colorScheme.onBackground,
-    actions: @Composable RowScope.() -> Unit = {},
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(
-            onClick = onBack,
-            colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor),
-        ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-        }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            color = contentColor,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        actions()
-    }
-}
+/** Relleno estándar para listas dentro de [AppScreen]. */
+fun screenPadding(inner: PaddingValues, extraBottom: Dp = 24.dp): PaddingValues = PaddingValues(
+    start = 16.dp,
+    end = 16.dp,
+    top = inner.calculateTopPadding(),
+    bottom = inner.calculateBottomPadding() + extraBottom,
+)
 
-/** Título de sección con acción opcional a la derecha. */
+/** Título de sección: más aire arriba que abajo. */
 @Composable
-fun SectionHeader(
-    title: String,
+fun SectionTitle(
+    text: String,
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
@@ -150,11 +138,11 @@ fun SectionHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 6.dp),
+            .padding(start = 4.dp, top = 20.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            title,
+            text,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.weight(1f),
@@ -165,106 +153,108 @@ fun SectionHeader(
     }
 }
 
-/** Etiqueta pequeña en mayúsculas dentro de tarjetas. */
+/** Grupo tonal de filas (como en los Ajustes de Android). */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: @Composable RowScope.() -> Unit = {}) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+fun ListGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Text(
-            text = text.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        trailing()
+        Column(content = content)
     }
 }
 
-/** Tarjeta base: blanca con borde suave en claro, pizarra en oscuro. */
+/** Separador entre filas de un [ListGroup]. */
+@Composable
+fun GroupDivider(inset: Dp = 16.dp) {
+    HorizontalDivider(modifier = Modifier.padding(start = inset), color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/** Fila de lista Material con fondo transparente para usar dentro de [ListGroup]. */
+@Composable
+fun GroupItem(
+    headline: String,
+    modifier: Modifier = Modifier,
+    supporting: String? = null,
+    supportingColor: Color? = null,
+    overline: String? = null,
+    onClick: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    ListItem(
+        headlineContent = { Text(headline, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        supportingContent = if (supporting != null) {
+            {
+                Text(
+                    supporting,
+                    color = supportingColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        } else {
+            null
+        },
+        overlineContent = if (overline != null) {
+            { Text(overline) }
+        } else {
+            null
+        },
+        leadingContent = leading,
+        trailingContent = trailing,
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    )
+}
+
+/** Icono de fila con el estilo de contorno común. */
+@Composable
+fun RowIcon(icon: ImageVector, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Icon(icon, contentDescription = null, tint = tint)
+}
+
+/** Superficie tonal genérica, para bloques que necesitan contenedor (formularios, gráficas). */
 @Composable
 fun AppCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    contentPadding: Dp = 18.dp,
+    contentPadding: Dp = 16.dp,
     color: Color = MaterialTheme.colorScheme.surfaceContainerLow,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(24.dp)
-    val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    val elevation = if (isDark()) 0.dp else 1.dp
+    val shape = RoundedCornerShape(16.dp)
     if (onClick != null) {
-        Surface(
-            onClick = onClick,
-            modifier = modifier.fillMaxWidth(),
-            shape = shape,
-            color = color,
-            border = border,
-            shadowElevation = elevation,
-        ) { Column(Modifier.padding(contentPadding), content = content) }
+        Surface(onClick = onClick, modifier = modifier.fillMaxWidth(), shape = shape, color = color) {
+            Column(Modifier.padding(contentPadding), content = content)
+        }
     } else {
-        Surface(
-            modifier = modifier.fillMaxWidth(),
-            shape = shape,
-            color = color,
-            border = border,
-            shadowElevation = elevation,
-        ) { Column(Modifier.padding(contentPadding), content = content) }
+        Surface(modifier = modifier.fillMaxWidth(), shape = shape, color = color) {
+            Column(Modifier.padding(contentPadding), content = content)
+        }
     }
 }
 
-/** Tarjeta con degradado y círculos decorativos (estilo "hero"). */
+/** Selector de opciones excluyentes con el componente nativo de Material 3. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GradientCard(
-    colors: List<Color>,
+fun Segments(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    contentPadding: Dp = 22.dp,
-    content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(30.dp)
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(Brush.linearGradient(colors))
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-    ) {
-        DecorativeCircles(Modifier.matchParentSize())
-        Column(Modifier.padding(contentPadding), content = content)
-    }
-}
-
-@Composable
-private fun DecorativeCircles(modifier: Modifier) {
-    // Deriva lenta de los círculos para dar vida a la tarjeta sin distraer.
-    val drift by rememberInfiniteTransition(label = "circles").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "drift",
-    )
-    Canvas(modifier) {
-        val dx = size.width * 0.06f * drift
-        val dy = size.height * 0.08f * drift
-        drawCircle(
-            color = Color.White.copy(alpha = 0.08f),
-            radius = size.minDimension * 0.75f,
-            center = Offset(size.width * 1.02f - dx, -size.height * 0.15f + dy),
-        )
-        drawCircle(
-            color = Color.White.copy(alpha = 0.06f),
-            radius = size.minDimension * 0.45f,
-            center = Offset(size.width * 0.85f + dx, size.height * 1.05f - dy),
-        )
-        drawCircle(
-            color = Color.White.copy(alpha = 0.05f),
-            radius = size.minDimension * 0.18f,
-            center = Offset(size.width * 0.08f + dx * 1.5f, size.height * 0.92f - dy),
-        )
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, label ->
+            SegmentedButton(
+                selected = index == selectedIndex,
+                onClick = { onSelect(index) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+            ) {
+                Text(label, maxLines = 1)
+            }
+        }
     }
 }
 
@@ -272,48 +262,18 @@ private fun DecorativeCircles(modifier: Modifier) {
 // Datos visuales
 // ---------------------------------------------------------------------------------------------
 
-/** Anillo de progreso animado con contenido en el centro. */
-@Composable
-fun RingProgress(
-    progress: Float,
-    color: Color,
-    modifier: Modifier = Modifier,
-    size: Dp = 72.dp,
-    strokeWidth: Dp = 8.dp,
-    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    content: @Composable BoxScope.() -> Unit = {},
-) {
-    val animated by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = tween(900, easing = FastOutSlowInEasing),
-        label = "ring",
-    )
-    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = strokeWidth.toPx()
-            val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
-            val topLeft = Offset(stroke / 2, stroke / 2)
-            drawArc(trackColor, -90f, 360f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-            if (animated > 0f) {
-                drawArc(color, -90f, 360f * animated, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-            }
-        }
-        content()
-    }
-}
-
-/** Barra de progreso redondeada y animada. */
+/** Barra de progreso fina y animada. */
 @Composable
 fun ProgressTrack(
     fraction: Float,
     color: Color,
     modifier: Modifier = Modifier,
-    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    height: Dp = 8.dp,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    height: Dp = 6.dp,
 ) {
     val animated by animateFloatAsState(
         targetValue = fraction.coerceIn(0f, 1f),
-        animationSpec = tween(800, easing = FastOutSlowInEasing),
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
         label = "track",
     )
     Box(
@@ -333,60 +293,53 @@ fun ProgressTrack(
     }
 }
 
-/** Texto que anima el cambio de valor (sube o baja). */
+/**
+ * Gráfica de línea de una serie real (evolución de notas). [guide] dibuja una línea
+ * discontinua de referencia (el aprobado).
+ */
 @Composable
-fun AnimatedNumber(
-    value: String,
-    style: TextStyle,
+fun Sparkline(
+    values: List<Float>,
     color: Color,
     modifier: Modifier = Modifier,
+    maxValue: Float = 10f,
+    guide: Float? = null,
 ) {
-    AnimatedContent(
-        targetState = value,
-        transitionSpec = {
-            (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut())
-        },
-        label = "number",
-        modifier = modifier,
-    ) { text ->
-        Text(text, style = style, color = color, maxLines = 1)
-    }
-}
-
-/** Mosaico de estadística con icono. */
-@Composable
-fun StatTile(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    accent: Color,
-    modifier: Modifier = Modifier,
-    caption: String? = null,
-    onClick: (() -> Unit)? = null,
-) {
-    AppCard(modifier = modifier, onClick = onClick, contentPadding = 14.dp) {
-        IconBubble(icon, accent, size = 34.dp)
-        Spacer(Modifier.height(12.dp))
-        AnimatedNumber(
-            value = value,
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (caption != null) {
-            Text(
-                caption,
-                style = MaterialTheme.typography.bodySmall,
-                color = accent,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+    if (values.size < 2) return
+    val guideColor = MaterialTheme.colorScheme.outline
+    val dotCenter = MaterialTheme.colorScheme.surfaceContainerLow
+    Canvas(modifier = modifier) {
+        val stepX = size.width / (values.size - 1)
+        fun y(v: Float) = size.height - (v.coerceIn(0f, maxValue) / maxValue) * size.height
+        guide?.let {
+            drawLine(
+                guideColor,
+                Offset(0f, y(it)),
+                Offset(size.width, y(it)),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)),
             )
+        }
+        val line = Path()
+        val fill = Path()
+        values.forEachIndexed { i, v ->
+            val x = i * stepX
+            if (i == 0) {
+                line.moveTo(x, y(v))
+                fill.moveTo(x, size.height)
+                fill.lineTo(x, y(v))
+            } else {
+                line.lineTo(x, y(v))
+                fill.lineTo(x, y(v))
+            }
+        }
+        fill.lineTo(size.width, size.height)
+        fill.close()
+        drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.18f), color.copy(alpha = 0f))))
+        drawPath(line, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        values.forEachIndexed { i, v ->
+            drawCircle(color, radius = 4.dp.toPx(), center = Offset(i * stepX, y(v)))
+            drawCircle(dotCenter, radius = 2.dp.toPx(), center = Offset(i * stepX, y(v)))
         }
     }
 }
@@ -395,57 +348,36 @@ fun StatTile(
 // Piezas pequeñas
 // ---------------------------------------------------------------------------------------------
 
-/** Icono dentro de un círculo de color suave. */
+/** Etiqueta de estado pequeña (control pequeño: forma de píldora). */
 @Composable
-fun IconBubble(icon: ImageVector, color: Color, modifier: Modifier = Modifier, size: Dp = 40.dp) {
-    Box(
+fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        color = color,
+        style = MaterialTheme.typography.labelMedium,
+        maxLines = 1,
         modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(size / 3))
-            .background(color.copy(alpha = 0.15f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(size * 0.55f))
-    }
+            .clip(CircleShape)
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    )
 }
 
-/** Etiqueta de color tipo "pill". */
+/** Código de la asignatura en su color (categoría de datos). */
 @Composable
-fun Pill(text: String, color: Color, modifier: Modifier = Modifier, icon: ImageVector? = null) {
-    Surface(
-        color = color.copy(alpha = 0.14f),
-        contentColor = color,
-        shape = RoundedCornerShape(50),
-        modifier = modifier,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-            }
-            Text(text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        }
-    }
-}
-
-/** Cuadrado redondeado con el código de la asignatura en su color. */
-@Composable
-fun SubjectBadge(code: String, modifier: Modifier = Modifier, size: Dp = 44.dp, filled: Boolean = false) {
+fun SubjectBadge(code: String, modifier: Modifier = Modifier, size: Dp = 40.dp) {
     val color = subjectColor(code)
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(size / 3.2f))
-            .background(if (filled) color else color.copy(alpha = 0.16f)),
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.14f)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = code,
-            color = if (filled) Color.White else color,
-            fontWeight = FontWeight.Black,
+            color = color,
+            fontWeight = FontWeight.ExtraBold,
             fontSize = when {
                 code.length <= 2 -> (size.value * 0.34f).sp
                 code.length <= 3 -> (size.value * 0.28f).sp
@@ -467,48 +399,7 @@ fun Dot(color: Color, modifier: Modifier = Modifier, size: Dp = 8.dp) {
     )
 }
 
-/** Control segmentado tipo "píldora" con la opción activa resaltada. */
-@Composable
-fun SegmentedControl(
-    options: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        options.forEachIndexed { index, label ->
-            val selected = index == selectedIndex
-            val background by animateColorAsState(
-                if (selected) MaterialTheme.colorScheme.surfaceContainerLowest else Color.Transparent,
-                label = "segment",
-            )
-            val textColor by animateColorAsState(
-                if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                label = "segmentText",
-            )
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(background)
-                    .clickable { onSelect(index) }
-                    .padding(vertical = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label, style = MaterialTheme.typography.labelLarge, color = textColor, maxLines = 1)
-            }
-        }
-    }
-}
-
-/** Mensaje de estado vacío con icono. */
+/** Estado vacío: un icono de contorno y dos líneas de texto, sin contenedor. */
 @Composable
 fun EmptyState(
     title: String,
@@ -519,70 +410,19 @@ fun EmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 28.dp, horizontal = 24.dp),
+            .padding(vertical = 32.dp, horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (icon != null) {
-            IconBubble(icon, MaterialTheme.colorScheme.primary, size = 56.dp)
-            Spacer(Modifier.height(4.dp))
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
         }
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text(
             message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            textAlign = TextAlign.Center,
         )
-    }
-}
-
-/**
- * Gráfica de línea compacta (p. ej. evolución de notas). [maxValue] fija la escala vertical;
- * [guide] dibuja una línea discontinua de referencia (como el aprobado).
- */
-@Composable
-fun Sparkline(
-    values: List<Float>,
-    color: Color,
-    modifier: Modifier = Modifier,
-    maxValue: Float = 10f,
-    guide: Float? = null,
-) {
-    if (values.size < 2) return
-    val guideColor = MaterialTheme.colorScheme.outline
-    Canvas(modifier = modifier) {
-        val stepX = size.width / (values.size - 1)
-        fun y(v: Float) = size.height - (v.coerceIn(0f, maxValue) / maxValue) * size.height
-        guide?.let {
-            drawLine(
-                guideColor,
-                Offset(0f, y(it)),
-                Offset(size.width, y(it)),
-                strokeWidth = 1.dp.toPx(),
-                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 8f)),
-            )
-        }
-        val line = androidx.compose.ui.graphics.Path()
-        val fill = androidx.compose.ui.graphics.Path()
-        values.forEachIndexed { i, v ->
-            val x = i * stepX
-            if (i == 0) {
-                line.moveTo(x, y(v))
-                fill.moveTo(x, size.height)
-                fill.lineTo(x, y(v))
-            } else {
-                line.lineTo(x, y(v))
-                fill.lineTo(x, y(v))
-            }
-        }
-        fill.lineTo(size.width, size.height)
-        fill.close()
-        drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.28f), color.copy(alpha = 0f))))
-        drawPath(line, color, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
-        values.forEachIndexed { i, v ->
-            drawCircle(color, radius = 4.dp.toPx(), center = Offset(i * stepX, y(v)))
-            drawCircle(Color.White, radius = 2.dp.toPx(), center = Offset(i * stepX, y(v)))
-        }
     }
 }

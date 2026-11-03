@@ -2,42 +2,34 @@ package com.julen.clases.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -54,10 +46,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
@@ -69,15 +58,14 @@ import com.julen.clases.ui.screens.OnboardingScreen
 import com.julen.clases.ui.screens.ScheduleScreen
 import com.julen.clases.ui.screens.SettingsScreen
 import com.julen.clases.ui.screens.SubjectDetailScreen
-import com.julen.clases.ui.theme.isDark
 import kotlinx.coroutines.launch
 
-enum class Destination(val label: String, val icon: ImageVector) {
-    HOME("Inicio", Icons.Filled.Home),
-    SCHEDULE("Horario", Icons.Filled.CalendarMonth),
-    ATTENDANCE("Asistencia", Icons.Filled.FactCheck),
-    AGENDA("Agenda", Icons.Filled.EventNote),
-    GRADES("Notas", Icons.Filled.School),
+enum class Destination(val label: String, val icon: ImageVector, val outlinedIcon: ImageVector) {
+    HOME("Inicio", Icons.Filled.Home, Icons.Outlined.Home),
+    SCHEDULE("Horario", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+    ATTENDANCE("Asistencia", Icons.Filled.FactCheck, Icons.Outlined.FactCheck),
+    AGENDA("Agenda", Icons.Filled.EventNote, Icons.Outlined.EventNote),
+    GRADES("Notas", Icons.Filled.School, Icons.Outlined.School),
 }
 
 /** Muestra un snackbar con acción opcional (normalmente "Deshacer"). */
@@ -131,9 +119,11 @@ fun ClasesApp(state: UiState, viewModel: AppViewModel) {
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
+            // Cada pestaña dibuja su propia barra superior, que ya gestiona la barra de estado.
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
-                FloatingNavBar(
+                AppNavigationBar(
                     selected = destination,
                     onSelect = { destination = it },
                     badges = mapOf(
@@ -213,91 +203,43 @@ private fun OverlaySurface(content: @Composable () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
 }
 
-/** Barra de navegación flotante con la pestaña activa expandida. */
+/** Barra de navegación estándar de Material 3 (3–5 destinos en pantallas compactas). */
 @Composable
-private fun FloatingNavBar(
+private fun AppNavigationBar(
     selected: Destination,
     onSelect: (Destination) -> Unit,
     badges: Map<Destination, Int>,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 10.dp),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(30.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            shadowElevation = if (isDark()) 0.dp else 10.dp,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier.padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Destination.entries.forEach { item ->
-                    val isSelected = item == selected
-                    val weight by animateFloatAsState(
-                        targetValue = if (isSelected) 2.3f else 1f,
-                        animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f),
-                        label = "navWeight",
-                    )
-                    val background by animateColorAsState(
-                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        label = "navBg",
-                    )
-                    val content by animateColorAsState(
-                        if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        label = "navFg",
-                    )
-                    Row(
-                        modifier = Modifier
-                            .weight(weight)
-                            .clip(CircleShape)
-                            .background(background)
-                            .clickable { onSelect(item) }
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val count = badges[item] ?: 0
-                        BadgedBox(
-                            badge = {
-                                if (count > 0 && !isSelected) {
-                                    Badge(
-                                        containerColor = if (item == Destination.ATTENDANCE) {
-                                            MaterialTheme.colorScheme.error
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        },
-                                    ) { Text(count.coerceAtMost(99).toString()) }
-                                }
-                            },
-                        ) {
-                            Icon(item.icon, contentDescription = item.label, tint = content, modifier = Modifier.size(22.dp))
-                        }
-                        AnimatedVisibility(
-                            visible = isSelected,
-                            enter = fadeIn() + expandHorizontally(),
-                            exit = fadeOut() + shrinkHorizontally(),
-                        ) {
-                            Row {
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    item.label,
-                                    color = content,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Clip,
-                                )
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+        Destination.entries.forEach { item ->
+            val count = badges[item] ?: 0
+            NavigationBarItem(
+                selected = item == selected,
+                onClick = { onSelect(item) },
+                icon = {
+                    BadgedBox(
+                        badge = {
+                            if (count > 0) {
+                                Badge(
+                                    containerColor = if (item == Destination.ATTENDANCE) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
+                                    contentColor = if (item == Destination.ATTENDANCE) {
+                                        MaterialTheme.colorScheme.onError
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    },
+                                ) { Text(count.coerceAtMost(99).toString()) }
                             }
-                        }
+                        },
+                    ) {
+                        Icon(if (item == selected) item.icon else item.outlinedIcon, contentDescription = null)
                     }
-                }
-            }
+                },
+                label = { Text(item.label, maxLines = 1) },
+            )
         }
     }
 }

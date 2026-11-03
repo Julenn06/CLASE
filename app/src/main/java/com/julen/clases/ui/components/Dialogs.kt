@@ -80,7 +80,7 @@ fun SingleDatePickerDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Brush.linearGradient(heroGradient()))
+                        .background(heroGradient().first())
                         .padding(horizontal = 22.dp, vertical = 18.dp),
                 ) {
                     Text(formatDateUtc(selected, "yyyy"), color = white.copy(alpha = 0.75f), style = MaterialTheme.typography.labelLarge)

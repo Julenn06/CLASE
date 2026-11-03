@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -64,7 +65,6 @@ import com.julen.clases.data.TaskKind
 import com.julen.clases.ui.ShowMessage
 import com.julen.clases.ui.components.AppCard
 import com.julen.clases.ui.components.Dot
-import com.julen.clases.ui.components.IconBubble
 import com.julen.clases.ui.components.Pill
 import com.julen.clases.ui.components.SingleDatePickerDialog
 import com.julen.clases.ui.daysUntil
@@ -127,7 +127,12 @@ internal fun TaskRow(
 ) {
     val color = subjectColor(task.subject)
     val haptic = LocalHapticFeedback.current
-    AppCard(contentPadding = 6.dp, onClick = onClick) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(start = 4.dp, top = 4.dp, bottom = 4.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = task.done, onCheckedChange = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -149,7 +154,7 @@ internal fun TaskRow(
                     modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
                 ) {
                     if (task.kind != TaskKind.TASK) {
-                        Pill(task.kind.label, task.kind.color(), icon = task.kind.icon())
+                        Pill(task.kind.label, task.kind.color())
                     }
                     if (showSubject) {
                         Dot(color, size = 7.dp)
@@ -363,7 +368,7 @@ internal fun GradeEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { IconBubble(Icons.Filled.Quiz, MaterialTheme.colorScheme.primary) },
+        icon = { Icon(Icons.Outlined.Quiz, contentDescription = null) },
         title = { Text(if (initial == null) "Nueva calificación" else "Editar calificación") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

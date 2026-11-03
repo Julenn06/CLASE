@@ -60,13 +60,14 @@ import com.julen.clases.data.formatMinutes
 import com.julen.clases.ui.ShowMessage
 import com.julen.clases.ui.capitalized
 import com.julen.clases.ui.components.AppCard
-import com.julen.clases.ui.components.DetailTopBar
-import com.julen.clases.ui.components.Pill
+import com.julen.clases.ui.components.AppScreen
+import com.julen.clases.ui.components.GroupDivider
+import com.julen.clases.ui.components.ListGroup
 import com.julen.clases.ui.components.ProgressTrack
-import com.julen.clases.ui.components.RingProgress
-import com.julen.clases.ui.components.SectionLabel
-import com.julen.clases.ui.components.Sparkline
+import com.julen.clases.ui.components.SectionTitle
 import com.julen.clases.ui.components.SingleDatePickerDialog
+import com.julen.clases.ui.components.Sparkline
+import com.julen.clases.ui.components.screenPadding
 import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.formatLocal
 import com.julen.clases.ui.formatPercent
@@ -98,37 +99,41 @@ fun SubjectDetailScreen(
     var pastEntry by remember { mutableStateOf<String?>(null) }
     var editingGrade by remember { mutableStateOf<Grade?>(null) }
 
+    AppScreen(title = code, onBack = onBack, edgeToEdgeBottom = true) { inner ->
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding(),
-        contentPadding = PaddingValues(bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.imePadding(),
+        contentPadding = screenPadding(inner, extraBottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { DetailHeader(code, state, onBack) }
+        item { DetailHeader(code, state) }
 
         // Asistencia
         if (attendance != null) {
             item {
-                AppCard(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    SectionLabel("Asistencia")
+                SectionTitle("Asistencia")
+                AppCard {
                     val hasPeriod = state.period != null
                     val usage = if (attendance.allowedAbsences > 0) attendance.absences.toFloat() / attendance.allowedAbsences else if (attendance.absences > 0 && hasPeriod) 1f else 0f
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RingProgress(progress = usage, color = attendance.risk.color(), size = 84.dp, strokeWidth = 9.dp) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    if (hasPeriod) formatPercent(attendance.percentage) else "—",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                )
-                                Text("faltas", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        Spacer(Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            if (hasPeriod) formatPercent(attendance.percentage) else "—",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = if (hasPeriod) attendance.risk.color() else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "de faltas",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                    }
+                    if (hasPeriod) {
+                        ProgressTrack(fraction = usage, color = attendance.risk.color(), height = 4.dp, modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                    Row {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             if (hasPeriod) {
-                                Pill(attendance.risk.label(), attendance.risk.color())
                                 Text(
                                     when {
                                         attendance.remainingAbsences < 0 -> "Límite superado en ${plural(-attendance.remainingAbsences, "falta")}"
@@ -189,14 +194,8 @@ fun SubjectDetailScreen(
 
         // Calificaciones
         item {
-            AppCard(modifier = Modifier.padding(horizontal = 20.dp), contentPadding = 16.dp) {
-                SectionLabel("Calificaciones") {
-                    TextButton(onClick = { showGradeEditor = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Añadir")
-                    }
-                }
+            SectionTitle("Calificaciones", actionLabel = "Añadir", onAction = { showGradeEditor = true })
+            AppCard {
                 val average = grades?.average
                 if (average != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -245,19 +244,17 @@ fun SubjectDetailScreen(
 
         // Tareas
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Agenda", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { showTaskEditor = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Añadir")
-                    }
-                }
+            Column {
+                SectionTitle("Agenda", actionLabel = "Añadir", onAction = { showTaskEditor = true })
                 if (tasks.isEmpty()) {
-                    Text("Sin tareas ni exámenes.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                tasks.forEach { task ->
+                    Text(
+                        "Sin tareas ni exámenes.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                } else ListGroup { tasks.forEachIndexed { index, task ->
+                    if (index > 0) GroupDivider(inset = 56.dp)
                     TaskRow(
                         task = task,
                         todayUtc = state.todayUtc,
@@ -269,7 +266,7 @@ fun SubjectDetailScreen(
                             showMessage("Eliminado: ${task.title}", "Deshacer") { viewModel.restoreTasks(listOf(task)) }
                         },
                     )
-                }
+                } }
             }
         }
 
@@ -278,8 +275,8 @@ fun SubjectDetailScreen(
 
         // Historial
         item {
-            AppCard(modifier = Modifier.padding(horizontal = 20.dp), contentPadding = 16.dp) {
-                SectionLabel("Historial de asistencia")
+            SectionTitle("Historial de asistencia")
+            AppCard {
                 if (history.isEmpty()) {
                     Text(
                         "Aquí aparecerán la fecha y hora de cada falta o retraso que anotes.",
@@ -318,7 +315,7 @@ fun SubjectDetailScreen(
             }
         }
 
-        item { Spacer(Modifier.navigationBarsPadding()) }
+    }
     }
 
     pastEntry?.let { kind ->
@@ -389,68 +386,43 @@ fun SubjectDetailScreen(
 }
 
 @Composable
-private fun DetailHeader(code: String, state: UiState, onBack: () -> Unit) {
-    val base = subjectBaseColor(code)
-    val white = Color.White
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-            .background(Brush.linearGradient(listOf(base, lerp(base, Color.Black, 0.45f)))),
-    ) {
-        Column {
-            DetailTopBar(title = "", onBack = onBack, contentColor = white)
-            Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
-                Text(code, color = white, style = MaterialTheme.typography.displayMedium)
-                Text(Subjects.nameOf(code), color = white.copy(alpha = 0.9f), style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HeaderChip("${Timetable.weeklyHours(code)} h / semana")
-                    state.today?.let { day ->
-                        Timetable.blocksFor(day).firstOrNull { it.subject == code }?.let { block ->
-                            HeaderChip("Hoy ${formatMinutes(block.start)}")
-                        }
-                    }
+private fun DetailHeader(code: String, state: UiState) {
+    val color = subjectColor(code)
+    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+        Text(Subjects.nameOf(code), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
+        Text(
+            buildString {
+                append(Timetable.weeklyHours(code)).append(" h a la semana")
+                state.today?.let { day ->
+                    Timetable.blocksFor(day).firstOrNull { it.subject == code }?.let { append(" · hoy a las ").append(formatMinutes(it.start)) }
                 }
-                Spacer(Modifier.height(14.dp))
-                // Días y horas de la semana
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Timetable.dayShortNames.forEachIndexed { day, short ->
-                        val hours = Timetable.hoursOn(day, code)
-                        val start = Timetable.blocksFor(day).firstOrNull { it.subject == code }?.start
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(white.copy(alpha = if (hours > 0) 0.2f else 0.07f))
-                                .padding(vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(short, color = white, style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                if (hours > 0 && start != null) formatMinutes(start) else "—",
-                                color = white.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                    }
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Timetable.dayShortNames.forEachIndexed { day, short ->
+                val hours = Timetable.hoursOn(day, code)
+                val start = Timetable.blocksFor(day).firstOrNull { it.subject == code }?.start
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (hours > 0) color.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(short, style = MaterialTheme.typography.labelLarge, color = if (hours > 0) color else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (hours > 0 && start != null) formatMinutes(start) else "—",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun HeaderChip(text: String) {
-    Text(
-        text,
-        color = Color.White,
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(alpha = 0.18f))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    )
 }
 
 /** Apuntes de la asignatura con autoguardado. */
@@ -469,14 +441,14 @@ private fun NotesCard(code: String, viewModel: AppViewModel) {
         onDispose { if (!saved) viewModel.saveNote(code, text) }
     }
 
-    AppCard(modifier = Modifier.padding(horizontal = 20.dp), contentPadding = 16.dp) {
-        SectionLabel("Apuntes") {
-            Text(
-                if (saved) "Guardado" else "Guardando…",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+    SectionTitle("Apuntes")
+    AppCard {
+        Text(
+            if (saved) "Se guarda solo" else "Guardando…",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
         OutlinedTextField(
             value = text,
             onValueChange = {
