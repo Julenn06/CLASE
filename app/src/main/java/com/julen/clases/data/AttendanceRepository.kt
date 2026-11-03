@@ -229,6 +229,16 @@ class AttendanceRepository(context: Context) {
 
     fun setThemeMode(mode: ThemeMode) = prefs.edit { putString(KEY_THEME, mode.name) }
 
+    // Avisos
+    fun isClassReminderEnabled(): Boolean = prefs.getBoolean(KEY_CLASS_REMINDER, false)
+    fun setClassReminderEnabled(value: Boolean) = prefs.edit { putBoolean(KEY_CLASS_REMINDER, value) }
+    fun getReminderLeadMinutes(): Int = prefs.getInt(KEY_REMINDER_LEAD, 5)
+    fun setReminderLeadMinutes(value: Int) = prefs.edit { putInt(KEY_REMINDER_LEAD, value) }
+    fun isDailySummaryEnabled(): Boolean = prefs.getBoolean(KEY_SUMMARY, false)
+    fun setDailySummaryEnabled(value: Boolean) = prefs.edit { putBoolean(KEY_SUMMARY, value) }
+    fun getSummaryHour(): Int = prefs.getInt(KEY_SUMMARY_HOUR, 20)
+    fun setSummaryHour(value: Int) = prefs.edit { putInt(KEY_SUMMARY_HOUR, value) }
+
     fun getUserName(): String = prefs.getString(KEY_NAME, "") ?: ""
 
     fun setUserName(name: String) = prefs.edit { putString(KEY_NAME, name.trim()) }
@@ -326,6 +336,10 @@ class AttendanceRepository(context: Context) {
         private const val KEY_GRADES = "grades"
         private const val KEY_HOLIDAYS = "holidays"
         private const val KEY_SCHEDULE = "schedule"
+        private const val KEY_CLASS_REMINDER = "reminder_class"
+        private const val KEY_REMINDER_LEAD = "reminder_lead"
+        private const val KEY_SUMMARY = "reminder_summary"
+        private const val KEY_SUMMARY_HOUR = "reminder_summary_hour"
         private const val KEY_LIMIT = "absence_limit"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_NAME = "user_name"

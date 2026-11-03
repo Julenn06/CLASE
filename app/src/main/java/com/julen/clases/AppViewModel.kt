@@ -24,6 +24,9 @@ import com.julen.clases.data.Task
 import com.julen.clases.data.TaskKind
 import com.julen.clases.data.ThemeMode
 import com.julen.clases.data.Timetable
+import com.julen.clases.notify.ReminderScheduler
+import com.julen.clases.widget.ClassWidget
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +54,7 @@ data class UiState(
     val userName: String = "",
     val schedule: ScheduleConfig = ScheduleConfig.DEFAULT,
     val onboarded: Boolean = true,
+    val reminders: ReminderSettings = ReminderSettings(),
 ) {
     val todayUtc: Long get() = AttendanceMath.todayUtc(nowMillis)
     val totalAbsences: Int get() = subjects.sumOf { it.absences }
@@ -78,6 +82,13 @@ data class UiState(
     fun attendanceOf(code: String): SubjectAttendance? = subjects.firstOrNull { it.code == code }
     fun gradesOf(code: String): GradeSummary? = gradeSummaries.firstOrNull { it.subject == code }
 }
+
+data class ReminderSettings(
+    val classReminder: Boolean = false,
+    val leadMinutes: Int = 5,
+    val dailySummary: Boolean = false,
+    val summaryHour: Int = 20,
+)
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -147,13 +158,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             userName = repo.getUserName(),
             schedule = schedule,
             onboarded = repo.isOnboarded(),
+            reminders = ReminderSettings(
+                classReminder = repo.isClassReminderEnabled(),
+                leadMinutes = repo.getReminderLeadMinutes(),
+                dailySummary = repo.isDailySummaryEnabled(),
+                summaryHour = repo.getSummaryHour(),
+            ),
         )
     }
 
     private inline fun update(block: AttendanceRepository.() -> Unit) {
         repo.block()
         refresh()
+        syncBackgroundWork()
     }
+
+    /** Reprograma los avisos y refresca el widget con los datos actuales. */
+    fun syncBackgroundWork() {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.Default) {
+            runCatching { ReminderScheduler.reschedule(app) }
+            runCatching { ClassWidget.refresh(app) }
+        }
+    }
+
+    // ---------- Avisos ----------
+
+    fun setClassReminder(enabled: Boolean) = update { setClassReminderEnabled(enabled) }
+    fun setReminderLead(minutes: Int) = update { setReminderLeadMinutes(minutes) }
+    fun setDailySummary(enabled: Boolean) = update { setDailySummaryEnabled(enabled) }
+    fun setSummaryHour(hour: Int) = update { setSummaryHour(hour) }
 
     // ---------- Asistencia ----------
 

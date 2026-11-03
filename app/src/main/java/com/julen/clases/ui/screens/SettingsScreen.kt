@@ -1,5 +1,8 @@
 package com.julen.clases.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RestartAlt
@@ -38,6 +42,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,6 +59,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
 import com.julen.clases.data.AttendanceMath
@@ -89,6 +95,32 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel, onBack: () -> Unit, 
             showMessage(if (viewModel.importBackup(uri)) "Datos restaurados" else "El archivo no es una copia válida", null, null)
         }
     }
+    // Qué aviso quería activarse cuando se pidió el permiso de notificaciones.
+    var pendingReminder by remember { mutableStateOf<String?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            when (pendingReminder) {
+                "class" -> viewModel.setClassReminder(true)
+                "summary" -> viewModel.setDailySummary(true)
+            }
+        } else {
+            showMessage("Sin permiso no se pueden mostrar avisos", null, null)
+        }
+        pendingReminder = null
+    }
+    fun enableReminder(kind: String, enabled: Boolean) {
+        val needsPermission = enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (needsPermission) {
+            pendingReminder = kind
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else if (kind == "class") {
+            viewModel.setClassReminder(enabled)
+        } else {
+            viewModel.setDailySummary(enabled)
+        }
+    }
+
     val versionName = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "—"
     }
@@ -119,6 +151,51 @@ fun SettingsScreen(state: UiState, viewModel: AppViewModel, onBack: () -> Unit, 
                                 }) { Text("Guardar") }
                             }
                         },
+                    )
+                }
+            }
+
+            item {
+                SettingsCard(Icons.Filled.Notifications, "Avisos", Color(0xFF7C3AED)) {
+                    ToggleRow(
+                        title = "Antes de cada clase",
+                        subtitle = "Te avisa de qué toca y a qué hora",
+                        checked = state.reminders.classReminder,
+                        onCheckedChange = { enableReminder("class", it) },
+                    )
+                    if (state.reminders.classReminder) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)) {
+                            listOf(2, 5, 10, 15).forEach { minutes ->
+                                FilterChip(
+                                    selected = state.reminders.leadMinutes == minutes,
+                                    onClick = { viewModel.setReminderLead(minutes) },
+                                    label = { Text("$minutes min") },
+                                )
+                            }
+                        }
+                    }
+                    ToggleRow(
+                        title = "Resumen de la noche",
+                        subtitle = "Exámenes, entregas y primera clase del día siguiente",
+                        checked = state.reminders.dailySummary,
+                        onCheckedChange = { enableReminder("summary", it) },
+                    )
+                    if (state.reminders.dailySummary) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                            listOf(18, 20, 21, 22).forEach { hour ->
+                                FilterChip(
+                                    selected = state.reminders.summaryHour == hour,
+                                    onClick = { viewModel.setSummaryHour(hour) },
+                                    label = { Text("$hour:00") },
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        "Con el ahorro de batería activo, Android puede retrasar los avisos unos minutos.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
             }
@@ -377,6 +454,23 @@ private fun SettingsCard(
             Text(title, style = MaterialTheme.typography.titleMedium)
         }
         content()
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

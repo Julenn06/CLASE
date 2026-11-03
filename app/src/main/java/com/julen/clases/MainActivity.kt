@@ -8,6 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.DisposableEffect
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.julen.clases.notify.Notifications
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.julen.clases.ui.ClasesApp
@@ -19,8 +21,10 @@ class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Notifications.createChannels(this)
         requestMaxRefreshRate()
 
         setContent {
@@ -47,6 +51,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Por si ha cambiado el día o la hora mientras la app estaba en segundo plano.
         viewModel.refresh()
+        viewModel.syncBackgroundWork()
     }
 
     /** Pide la tasa de refresco más alta disponible para animaciones fluidas. */
