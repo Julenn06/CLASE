@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Horario de Clases</string>
+    <string name="attendance_title">Asistencia</string>
+    <string name="periodo_lectivo">PERÍODO LECTIVO</string>
+    <string name="configurar">Configurar</string>
+    <string name="retrasos">RETRASOS</string>
+    <string name="ausencias">AUSENCIAS</string>
+    <string name="status_safe">Seguro</string>
+    <string name="status_warning">Advertencia</string>
+    <string name="status_danger">Peligro Límite</string>
+    <string name="back">Volver</string>
+    <string name="add_absence">Añadir ausencia</string>
+    <string name="remove_absence">Quitar ausencia</string>
+    <string name="add_tardy">Añadir retraso</string>
+    <string name="remove_tardy">Quitar retraso</string>
+    <string name="selecciona_el_rango_de_fechas">Selecciona el rango de fechas</string>
+    <string name="label_percentage">%% Faltas: %1$.1f%%</string>
+    <string name="tardy_format">%1$d/3</string>
+</resources>
