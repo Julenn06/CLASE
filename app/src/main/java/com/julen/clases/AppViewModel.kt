@@ -2,139 +2,195 @@ package com.julen.clases
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.julen.clases.data.AttendanceMath
+import com.julen.clases.data.AttendanceRepository
+import com.julen.clases.data.EvaluationPeriod
+import com.julen.clases.data.HistoryEntry
+import com.julen.clases.data.NowStatus
+import com.julen.clases.data.PeriodProgress
+import com.julen.clases.data.RiskLevel
+import com.julen.clases.data.SubjectAttendance
+import com.julen.clases.data.Subjects
+import com.julen.clases.data.TardyResult
+import com.julen.clases.data.Task
+import com.julen.clases.data.ThemeMode
+import com.julen.clases.data.Timetable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.text.SimpleDateFormat
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import androidx.core.content.edit
+
+data class UiState(
+    val nowMillis: Long = System.currentTimeMillis(),
+    /** Día lectivo actual (0 = lunes … 4 = viernes) o null en fin de semana. */
+    val today: Int? = null,
+    val nowStatus: NowStatus = NowStatus.NoClasses(NowStatus.Reason.WEEKEND, 0, null),
+    val period: EvaluationPeriod? = null,
+    val periodProgress: PeriodProgress? = null,
+    val absenceLimit: Float = AttendanceRepository.DEFAULT_LIMIT,
+    val subjects: List<SubjectAttendance> = emptyList(),
+    val history: List<HistoryEntry> = emptyList(),
+    val tasks: List<Task> = emptyList(),
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+) {
+    val totalAbsences: Int get() = subjects.sumOf { it.absences }
+    val totalTardies: Int get() = subjects.sumOf { it.tardies }
+    val subjectsAtRisk: List<SubjectAttendance> get() = subjects.filter { it.risk != RiskLevel.SAFE }
+    val pendingTasks: List<Task> get() = tasks.filter { !it.done }
+    val todayUtc: Long get() = AttendanceMath.todayUtc(nowMillis)
+
+    fun attendanceOf(code: String): SubjectAttendance? = subjects.firstOrNull { it.code == code }
+}
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
-    
-    private val manager = AttendanceManager(application)
-    val subjects = listOf("SI", "SGE", "DI", "AD", "PSP", "PMDM", "IPEII", "OP1", "OP2")
 
-    // Estado reactivo global de la app
-    private val _uiState = MutableStateFlow(UiState())
+    private val repo = AttendanceRepository(application)
+
+    private val _uiState = MutableStateFlow(buildState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
-        refreshDashboard()
+        // Reloj: actualiza la clase actual al comienzo de cada minuto.
+        viewModelScope.launch {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                delay(60_000 - now % 60_000 + 50)
+                refresh()
+            }
+        }
     }
 
-    fun refreshDashboard() {
-        val dates = manager.getEvaluationDates()
-        val formattedRange = if (dates != null) {
-            val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-            "${sdf.format(Date(dates.first))} - ${sdf.format(Date(dates.second))}"
-        } else {
-            "Fechas no seleccionadas"
-        }
+    fun refresh() {
+        _uiState.value = buildState()
+    }
 
-        val subjectItems = subjects.map { subject ->
-            SubjectState(
-                name = subject,
-                absences = manager.getAbsences(subject),
-                tardies = manager.getTardies(subject),
-                percentage = manager.calculateAbsencePercentage(subject)
+    private fun buildState(): UiState {
+        val now = System.currentTimeMillis()
+        val cal = Calendar.getInstance().apply { timeInMillis = now }
+        val weekday = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        val today = weekday.takeIf { it < 5 }
+        val minute = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+
+        val period = repo.getPeriod()?.takeIf { it.isValid }
+        val limit = repo.getAbsenceLimit()
+
+        val subjects = Subjects.codes.map { code ->
+            AttendanceMath.subjectAttendance(
+                code = code,
+                absences = repo.getAbsences(code),
+                tardies = repo.getTardies(code),
+                period = period,
+                limitPercent = limit,
             )
         }
 
-        _uiState.value = UiState(
-            totalAbsences = manager.getTotalAbsences(),
-            progress = manager.getEvaluationProgress(),
-            remainingDays = manager.getRemainingDays(),
-            currentSubject = getCurrentSubjectName(),
-            dateRangeText = formattedRange,
-            subjectList = subjectItems
+        return UiState(
+            nowMillis = now,
+            today = today,
+            nowStatus = Timetable.statusAt(today, minute),
+            period = period,
+            periodProgress = period?.let { AttendanceMath.progress(it, AttendanceMath.todayUtc(now)) },
+            absenceLimit = limit,
+            subjects = subjects,
+            history = repo.getHistory().sortedByDescending { it.timestamp },
+            tasks = repo.getTasks(),
+            themeMode = repo.getThemeMode(),
         )
     }
 
+    // ---------- Asistencia ----------
+
     fun addAbsence(subject: String) {
-        manager.addAbsence(subject)
-        refreshDashboard()
+        repo.addAbsence(subject)
+        refresh()
     }
 
     fun removeAbsence(subject: String) {
-        manager.removeAbsence(subject)
-        refreshDashboard()
+        repo.removeAbsence(subject)
+        refresh()
     }
 
-    fun addTardy(subject: String): Boolean {
-        val result = manager.addTardy(subject)
-        refreshDashboard()
-        return result.absenceAdded
+    fun addTardy(subject: String): TardyResult {
+        val result = repo.addTardy(subject)
+        refresh()
+        return result
     }
 
     fun removeTardy(subject: String) {
-        manager.removeTardy(subject)
-        refreshDashboard()
+        repo.removeTardy(subject)
+        refresh()
     }
 
-    fun saveDates(start: Long, end: Long) {
-        manager.saveEvaluationDates(start, end)
-        refreshDashboard()
+    fun undoTardy(subject: String, result: TardyResult) {
+        repo.undoTardy(subject, result)
+        refresh()
     }
 
-    fun getNote(subject: String): String = manager.getNote(subject)
-
-    fun saveNote(subject: String, note: String) {
-        manager.saveNote(subject, note)
+    fun savePeriod(startUtc: Long, endUtc: Long) {
+        repo.savePeriod(startUtc, endUtc)
+        refresh()
     }
 
-    fun resetAllData() {
-        val prefs = getApplication<Application>().getSharedPreferences("attendance_prefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit { clear() }
-        refreshDashboard()
+    // ---------- Apuntes ----------
+
+    fun getNote(subject: String): String = repo.getNote(subject)
+
+    fun saveNote(subject: String, note: String) = repo.saveNote(subject, note)
+
+    fun subjectsWithNotes(): Set<String> =
+        Subjects.codes.filter { repo.getNote(it).isNotBlank() }.toSet()
+
+    // ---------- Tareas ----------
+
+    fun addTask(subject: String, title: String, dueUtc: Long?) {
+        val task = Task(System.currentTimeMillis(), subject, title.trim(), dueUtc)
+        repo.saveTasks(repo.getTasks() + task)
+        refresh()
     }
 
-    private fun getCurrentSubjectName(): String {
-        val now = Calendar.getInstance()
-        val day = now.get(Calendar.DAY_OF_WEEK)
-        val hour = now.get(Calendar.HOUR_OF_DAY)
-        val minute = now.get(Calendar.MINUTE)
-        val time = hour * 100 + minute
-
-        if (day == Calendar.SATURDAY || day == Calendar.SUNDAY) return "Libre (Finde)"
-        
-        return when (time) {
-            in 800..859 -> getSubjectForTime(day, 0)
-            in 900..959 -> getSubjectForTime(day, 1)
-            in 1000..1059 -> getSubjectForTime(day, 2)
-            in 1100..1129 -> "Recreo"
-            in 1130..1229 -> getSubjectForTime(day, 3)
-            in 1230..1329 -> getSubjectForTime(day, 4)
-            in 1330..1430 -> getSubjectForTime(day, 5)
-            else -> "Fuera de clase"
-        }
+    fun toggleTask(id: Long) {
+        repo.saveTasks(repo.getTasks().map { if (it.id == id) it.copy(done = !it.done) else it })
+        refresh()
     }
 
-    private fun getSubjectForTime(day: Int, slot: Int): String {
-        val schedule = mapOf(
-            Calendar.MONDAY to listOf("OP1", "OP1", "IPEII", "IPEII", "SI", "SI"),
-            Calendar.TUESDAY to listOf("PMDM", "PMDM", "PMDM", "DI", "DI", "DI"),
-            Calendar.WEDNESDAY to listOf("AD", "AD", "OP2", "OP2", "DI", "DI"),
-            Calendar.THURSDAY to listOf("AD", "AD", "IPEII", "SI", "SI", "SI"),
-            Calendar.FRIDAY to listOf("PSP", "PSP", "PSP", "SGE", "SGE", "SGE")
-        )
-        return schedule[day]?.getOrNull(slot) ?: "Libre"
+    fun deleteTask(id: Long) {
+        repo.saveTasks(repo.getTasks().filterNot { it.id == id })
+        refresh()
     }
 
-    data class UiState(
-        val totalAbsences: Int = 0,
-        val progress: Int = 0,
-        val remainingDays: Long = 0,
-        val currentSubject: String = "Libre",
-        val dateRangeText: String = "Fechas no seleccionadas",
-        val subjectList: List<SubjectState> = emptyList()
-    )
+    fun restoreTask(task: Task) {
+        repo.saveTasks(repo.getTasks().filterNot { it.id == task.id } + task)
+        refresh()
+    }
 
-    data class SubjectState(
-        val name: String,
-        val absences: Int,
-        val tardies: Int,
-        val percentage: Float
-    )
+    fun clearCompletedTasks() {
+        repo.saveTasks(repo.getTasks().filterNot { it.done })
+        refresh()
+    }
+
+    // ---------- Ajustes ----------
+
+    fun setAbsenceLimit(value: Float) {
+        repo.setAbsenceLimit(value)
+        refresh()
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        repo.setThemeMode(mode)
+        refresh()
+    }
+
+    fun resetAttendance() {
+        repo.resetAttendance()
+        refresh()
+    }
+
+    fun resetAll() {
+        repo.resetAll()
+        refresh()
+    }
 }
