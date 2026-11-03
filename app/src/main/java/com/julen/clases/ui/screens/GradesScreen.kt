@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -45,11 +46,13 @@ import com.julen.clases.ui.components.ProgressTrack
 import com.julen.clases.ui.components.RingProgress
 import com.julen.clases.ui.components.ScreenHeader
 import com.julen.clases.ui.components.SectionHeader
+import com.julen.clases.ui.components.Sparkline
 import com.julen.clases.ui.components.SubjectBadge
 import com.julen.clases.ui.formatScore
 import com.julen.clases.ui.plural
 import com.julen.clases.ui.theme.AppColors
 import com.julen.clases.ui.theme.gradeColor
+import com.julen.clases.ui.theme.subjectColor
 
 @Composable
 fun GradesScreen(state: UiState, viewModel: AppViewModel, navigator: Navigator, showMessage: ShowMessage) {
@@ -205,5 +208,16 @@ private fun SubjectGradeCard(summary: GradeSummary, onClick: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         ProgressTrack(fraction = average / GradeMath.MAX_SCORE, color = color, height = 6.dp)
+        if (summary.grades.size >= 2) {
+            Sparkline(
+                values = summary.grades.map { it.score },
+                color = subjectColor(summary.subject),
+                guide = GradeMath.PASS_MARK,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(top = 10.dp),
+            )
+        }
     }
 }

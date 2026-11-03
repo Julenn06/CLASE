@@ -144,6 +144,7 @@ private fun OverviewCard(state: UiState, onConfigure: () -> Unit) {
                 OverviewLine("Faltas", state.totalAbsences.toString())
                 OverviewLine("Retrasos", state.totalTardies.toString())
                 OverviewLine("En riesgo", state.subjectsAtRisk.size.toString())
+                state.streak?.let { OverviewLine("Racha 🔥", plural(it, "día", "días")) }
             }
         }
         Spacer(Modifier.height(16.dp))

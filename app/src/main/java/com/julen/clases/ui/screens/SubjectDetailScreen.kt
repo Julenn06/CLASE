@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,6 +65,9 @@ import com.julen.clases.ui.components.Pill
 import com.julen.clases.ui.components.ProgressTrack
 import com.julen.clases.ui.components.RingProgress
 import com.julen.clases.ui.components.SectionLabel
+import com.julen.clases.ui.components.Sparkline
+import com.julen.clases.ui.components.SingleDatePickerDialog
+import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.formatLocal
 import com.julen.clases.ui.formatPercent
 import com.julen.clases.ui.formatScore
@@ -73,6 +77,7 @@ import com.julen.clases.ui.theme.color
 import com.julen.clases.ui.theme.gradeColor
 import com.julen.clases.ui.theme.label
 import com.julen.clases.ui.theme.subjectBaseColor
+import com.julen.clases.ui.theme.subjectColor
 import kotlinx.coroutines.delay
 
 @Composable
@@ -90,6 +95,7 @@ fun SubjectDetailScreen(
     var showTaskEditor by remember { mutableStateOf(false) }
     var showGradeEditor by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<Task?>(null) }
+    var pastEntry by remember { mutableStateOf<String?>(null) }
     var editingGrade by remember { mutableStateOf<Grade?>(null) }
 
     LazyColumn(
@@ -165,6 +171,18 @@ fun SubjectDetailScreen(
                             modifier = Modifier.weight(1f),
                         )
                     }
+                    Row(modifier = Modifier.padding(top = 6.dp)) {
+                        TextButton(onClick = { pastEntry = "tardy" }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Retraso otro día")
+                        }
+                        TextButton(onClick = { pastEntry = "absence" }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Falta otro día")
+                        }
+                    }
                 }
             }
         }
@@ -197,6 +215,18 @@ fun SubjectDetailScreen(
                     Spacer(Modifier.height(8.dp))
                     ProgressTrack(fraction = average / GradeMath.MAX_SCORE, color = gradeColor(average), height = 6.dp)
                     Spacer(Modifier.height(6.dp))
+                    val scores = grades.grades.map { it.score }
+                    if (scores.size >= 2) {
+                        Sparkline(
+                            values = scores,
+                            color = subjectColor(code),
+                            guide = GradeMath.PASS_MARK,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(90.dp)
+                                .padding(vertical = 8.dp),
+                        )
+                    }
                 }
                 if (grades == null || grades.grades.isEmpty()) {
                     Text("Sin notas todavía.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -289,6 +319,29 @@ fun SubjectDetailScreen(
         }
 
         item { Spacer(Modifier.navigationBarsPadding()) }
+    }
+
+    pastEntry?.let { kind ->
+        SingleDatePickerDialog(
+            initialUtc = state.todayUtc - AttendanceMath.DAY_MS,
+            onDismiss = { pastEntry = null },
+            onConfirm = { date ->
+                pastEntry = null
+                if (date != null) {
+                    val label = formatDateUtc(date, "EEEE d MMM")
+                    if (kind == "absence") {
+                        viewModel.addAbsenceOn(code, date)
+                        showMessage("Falta anotada el $label", "Deshacer") { viewModel.removeAbsence(code) }
+                    } else {
+                        val result = viewModel.addTardyOn(code, date)
+                        showMessage(
+                            if (result.convertedToAbsence) "Retraso del $label: suma 1 falta" else "Retraso anotado el $label",
+                            "Deshacer",
+                        ) { viewModel.undoTardy(code, result) }
+                    }
+                }
+            },
+        )
     }
 
     if (showTaskEditor || editingTask != null) {

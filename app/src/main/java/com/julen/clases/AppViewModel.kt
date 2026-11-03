@@ -57,6 +57,8 @@ data class UiState(
     val schedule: ScheduleConfig = ScheduleConfig.DEFAULT,
     val onboarded: Boolean = true,
     val reminders: ReminderSettings = ReminderSettings(),
+    /** Días lectivos seguidos sin faltar (null si nunca ha faltado). */
+    val streak: Int? = null,
 ) {
     val todayUtc: Long get() = AttendanceMath.todayUtc(nowMillis)
     val totalAbsences: Int get() = subjects.sumOf { it.absences }
@@ -130,6 +132,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val period = repo.getPeriod()?.takeIf { it.isValid }
         val limit = repo.getAbsenceLimit()
         val grades = repo.getGrades()
+        val history = repo.getHistory().sortedByDescending { it.timestamp }
 
         val subjects = Subjects.codes.map { code ->
             AttendanceMath.subjectAttendance(
@@ -151,7 +154,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             periodProgress = period?.let { AttendanceMath.progress(it, todayUtc) },
             absenceLimit = limit,
             subjects = subjects,
-            history = repo.getHistory().sortedByDescending { it.timestamp },
+            history = history,
+            streak = AttendanceMath.schoolDaysWithoutAbsence(
+                history.filter { it.type == com.julen.clases.data.EntryType.ABSENCE }.map { it.timestamp },
+                todayUtc,
+                holidays,
+            ),
             tasks = repo.getTasks(),
             grades = grades,
             gradeSummaries = GradeMath.summaries(grades),
@@ -198,6 +206,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun removeAbsence(subject: String) = update { removeAbsence(subject) }
     fun removeTardy(subject: String) = update { removeTardy(subject) }
     fun undoTardy(subject: String, result: TardyResult) = update { undoTardy(subject, result) }
+
+    /** Registra una falta o retraso de un día pasado ([dateUtc] a medianoche UTC). */
+    fun addAbsenceOn(subject: String, dateUtc: Long) = update { addAbsence(subject, AttendanceMath.localNoonOf(dateUtc)) }
+
+    fun addTardyOn(subject: String, dateUtc: Long): TardyResult {
+        val result = repo.addTardy(subject, AttendanceMath.localNoonOf(dateUtc))
+        refresh()
+        syncBackgroundWork()
+        return result
+    }
 
     fun addTardy(subject: String): TardyResult {
         val result = repo.addTardy(subject)

@@ -1,6 +1,12 @@
 package com.julen.clases.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,12 +17,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,15 +38,26 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.julen.clases.AppViewModel
 import com.julen.clases.UiState
+import com.julen.clases.data.CalendarMath
 import com.julen.clases.data.NowStatus
 import com.julen.clases.data.Subjects
 import com.julen.clases.data.Task
 import com.julen.clases.data.TaskKind
 import com.julen.clases.ui.ShowMessage
+import com.julen.clases.ui.capitalized
+import com.julen.clases.ui.components.AppCard
+import com.julen.clases.ui.components.Dot
 import com.julen.clases.ui.components.EmptyState
+import com.julen.clases.ui.components.MonthGrid
+import com.julen.clases.ui.components.WeekdayHeader
+import com.julen.clases.ui.formatDateUtc
 import com.julen.clases.ui.components.ScreenHeader
 import com.julen.clases.ui.components.SegmentedControl
 import com.julen.clases.ui.daysUntil
@@ -71,6 +91,7 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
     var subjectFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<Task?>(null) }
+    var selectedDay by rememberSaveable { mutableStateOf(state.todayUtc) }
 
     val showDone = tab == 1
     val visible = state.tasks
@@ -97,11 +118,32 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
                     subtitle = if (pending == 0) "Todo al día" else "$pending pendiente${if (pending == 1) "" else "s"}",
                 )
                 SegmentedControl(
-                    options = listOf("Pendientes", "Hechas"),
+                    options = listOf("Pendientes", "Hechas", "Calendario"),
                     selectedIndex = tab,
                     onSelect = { tab = it },
                 )
             }
+            if (tab == 2) {
+                item {
+                    AgendaCalendar(
+                        state = state,
+                        selectedDay = selectedDay,
+                        onSelectDay = { selectedDay = it },
+                    )
+                }
+                val dayTasks = state.tasks.filter { it.dueUtc == selectedDay }.sortedWith(taskOrder)
+                item {
+                    Text(
+                        formatDateUtc(selectedDay, "EEEE d 'de' MMMM").capitalized() + if (dayTasks.isEmpty()) " · libre" else " · ${dayTasks.size}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp, start = 4.dp),
+                    )
+                }
+                items(dayTasks, key = { it.id }) { task ->
+                    TaskRow(task, state.todayUtc, onToggle = { viewModel.toggleTask(task.id) }, onDelete = { onDelete(task) }, onClick = { editingTask = task })
+                }
+            } else {
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
@@ -169,6 +211,7 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
                     }
                 }
             }
+            }
         }
 
         ExtendedFloatingActionButton(
@@ -188,6 +231,7 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
         val editing = editingTask
         TaskEditorSheet(
             initial = editing,
+            initialDueUtc = if (tab == 2) selectedDay else null,
             initialSubject = subjectFilter ?: current ?: Subjects.codes.firstOrNull() ?: "",
             onDismiss = {
                 showEditor = false
@@ -204,5 +248,70 @@ fun AgendaScreen(state: UiState, viewModel: AppViewModel, showMessage: ShowMessa
                 showMessage("Guardado en $subject: ${title.trim()}", null, null)
             },
         )
+    }
+}
+
+/** Calendario mensual de la agenda con puntos por cada tarea, examen o entrega. */
+@Composable
+private fun AgendaCalendar(state: UiState, selectedDay: Long, onSelectDay: (Long) -> Unit) {
+    var shown by rememberSaveable { mutableStateOf(CalendarMath.yearOf(selectedDay) * 12 + CalendarMath.monthOf(selectedDay) - 1) }
+    val year = Math.floorDiv(shown, 12)
+    val month = Math.floorMod(shown, 12) + 1
+    val byDay = state.tasks.filter { it.dueUtc != null }.groupBy { it.dueUtc }
+
+    AppCard(contentPadding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { shown-- }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Mes anterior") }
+            Text(
+                formatDateUtc(CalendarMath.date(year, month, 1), "MMMM yyyy").capitalized(),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { shown++ }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Mes siguiente") }
+        }
+        WeekdayHeader(Modifier.padding(vertical = 6.dp))
+        MonthGrid(year, month, cellHeight = 52.dp) { day, dayOfMonth, weekday ->
+            val tasks = byDay[day].orEmpty()
+            val selected = day == selectedDay
+            val isToday = day == state.todayUtc
+            val holiday = state.holidays.any { day in it }
+            Column(
+                modifier = Modifier
+                    .padding(2.dp)
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        when {
+                            selected -> MaterialTheme.colorScheme.primary
+                            isToday -> MaterialTheme.colorScheme.primaryContainer
+                            else -> Color.Transparent
+                        }
+                    )
+                    .clickable { onSelectDay(day) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    dayOfMonth.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (selected || isToday) FontWeight.ExtraBold else FontWeight.Medium,
+                    color = when {
+                        selected -> MaterialTheme.colorScheme.onPrimary
+                        holiday -> AppColors.Safe
+                        weekday >= 5 -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 3.dp).height(5.dp)) {
+                    tasks.take(3).forEach { task ->
+                        Dot(
+                            if (selected) MaterialTheme.colorScheme.onPrimary else if (task.done) MaterialTheme.colorScheme.outline else task.kind.color(),
+                            size = 5.dp,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

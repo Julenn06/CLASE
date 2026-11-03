@@ -448,7 +448,7 @@ private fun StatsRow(state: UiState, navigator: Navigator) {
             value = attendance?.let { formatPercent(it) } ?: "—",
             icon = Icons.Filled.TaskAlt,
             accent = AppColors.Safe,
-            caption = plural(state.totalAbsences, "falta"),
+            caption = state.streak?.let { "🔥 ${plural(it, "día", "días")} sin faltar" } ?: plural(state.totalAbsences, "falta"),
             modifier = Modifier.weight(1f),
             onClick = { navigator.openTab(Destination.ATTENDANCE) },
         )

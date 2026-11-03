@@ -195,11 +195,12 @@ internal fun TaskEditorSheet(
     onConfirm: (subject: String, title: String, dueUtc: Long?, kind: TaskKind) -> Unit,
     lockSubject: Boolean = false,
     initial: Task? = null,
+    initialDueUtc: Long? = null,
 ) {
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
     var subject by rememberSaveable { mutableStateOf(initial?.subject ?: initialSubject) }
     var kind by rememberSaveable { mutableStateOf(initial?.kind ?: TaskKind.TASK) }
-    var due by rememberSaveable { mutableStateOf(initial?.dueUtc) }
+    var due by rememberSaveable { mutableStateOf(if (initial != null) initial.dueUtc else initialDueUtc) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
