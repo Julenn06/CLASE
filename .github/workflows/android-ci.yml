@@ -1,0 +1,186 @@
+# CI del proyecto Android "Horario de Clases" (módulo :app).
+#
+# - Compila el APK debug y lo publica como artifact.
+# - Ejecuta los tests unitarios (JVM) y publica sus informes aunque fallen.
+# - Comprueba que la variante release y los tests instrumentados compilan.
+# - Ejecuta Android Lint en un job separado.
+#
+# Versiones tomadas del propio repositorio (no se fijan aquí):
+#   Gradle      -> gradle/wrapper/gradle-wrapper.properties
+#   AGP         -> gradle/libs.versions.toml
+#   compileSdk  -> app/build.gradle.kts (el SDK que falte lo descarga AGP)
+#   JDK 21      -> gradle/gradle-daemon-jvm.properties (toolchainVersion=21)
+
+name: Android CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Solo lectura del código: no se necesita ningún otro permiso.
+permissions:
+  contents: read
+
+# Cancela ejecuciones antiguas de la misma rama/PR (nunca en main).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: temurin
+  # Sin colores ni barras de progreso en los logs.
+  TERM: dumb
+
+jobs:
+  build:
+    name: Compilar, tests y APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v5
+
+      - name: Comprobar que gradlew es ejecutable
+        run: |
+          if [ ! -x ./gradlew ]; then
+            echo "::error file=gradlew,title=gradlew sin permiso de ejecución::Ejecuta 'git update-index --chmod=+x gradlew' y haz commit."
+            exit 1
+          fi
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Valida el gradle-wrapper.jar y cachea dependencias y distribución de Gradle.
+      # La caché solo se escribe desde main; las PR la leen.
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compilar APK debug
+        run: |
+          ./gradlew :app:assembleDebug --stacktrace || {
+            echo "::error title=Fallo al compilar el APK debug::Revisa el paso 'Compilar APK debug' para ver el error de Gradle o del compilador."
+            exit 1
+          }
+
+      - name: Ejecutar tests unitarios
+        run: |
+          ./gradlew :app:testDebugUnitTest --continue || {
+            echo "::error title=Tests unitarios fallidos::Descarga el artifact 'informes-tests-unitarios' o mira el resumen del job para ver qué tests han fallado."
+            exit 1
+          }
+
+      - name: Compilar variante release (sin firmar)
+        run: |
+          ./gradlew :app:assembleRelease || {
+            echo "::error title=Fallo al compilar la variante release::La variante release no compila. El APK debug sí se ha generado."
+            exit 1
+          }
+
+      # No se ejecutan (necesitan emulador): solo se comprueba que compilan.
+      - name: Compilar tests instrumentados
+        run: |
+          ./gradlew :app:assembleDebugAndroidTest || {
+            echo "::error title=Fallo al compilar los tests instrumentados::Revisa app/src/androidTest."
+            exit 1
+          }
+
+      - name: Subir APK debug
+        if: ${{ !cancelled() && hashFiles('app/build/outputs/apk/debug/*.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Subir informes de tests unitarios
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: informes-tests-unitarios
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Resumen de tests
+        if: ${{ !cancelled() }}
+        shell: python
+        run: |
+          import glob, os
+          import xml.etree.ElementTree as ET
+
+          files = sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml"))
+          lines = ["## Tests unitarios (debug)", ""]
+          if not files:
+              lines.append("⚠️ No se han encontrado resultados. Probablemente la compilación falló antes de ejecutar los tests.")
+          else:
+              total = failed = skipped = 0
+              failures = []
+              for path in files:
+                  suite = ET.parse(path).getroot()
+                  total += int(suite.get("tests", 0))
+                  skipped += int(suite.get("skipped", 0))
+                  for case in suite.iter("testcase"):
+                      problem = case.find("failure")
+                      if problem is None:
+                          problem = case.find("error")
+                      if problem is not None:
+                          failed += 1
+                          message = (problem.get("message") or "").splitlines()[0:1]
+                          failures.append(f"| `{case.get('classname')}` | `{case.get('name')}` | {''.join(message)[:200]} |")
+              passed = total - failed - skipped
+              icon = "✅" if failed == 0 else "❌"
+              lines.append(f"{icon} **{passed}** correctos · **{failed}** fallidos · **{skipped}** omitidos · {total} en total")
+              if failures:
+                  lines += ["", "| Clase | Test | Mensaje |", "|---|---|---|"] + failures
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("\n".join(lines) + "\n")
+
+  lint:
+    name: Android Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v5
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ejecutar Android Lint
+        run: |
+          ./gradlew :app:lintDebug || {
+            echo "::error title=Android Lint ha encontrado errores::Descarga el artifact 'informe-lint' para ver el detalle."
+            exit 1
+          }
+
+      - name: Subir informe de Lint
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-lint
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: warn
+          retention-days: 14
