@@ -47,6 +47,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -124,9 +126,13 @@ internal fun TaskRow(
     onClick: (() -> Unit)? = null,
 ) {
     val color = subjectColor(task.subject)
+    val haptic = LocalHapticFeedback.current
     AppCard(contentPadding = 6.dp, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = task.done, onCheckedChange = { onToggle() })
+            Checkbox(checked = task.done, onCheckedChange = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onToggle()
+            })
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     task.title,

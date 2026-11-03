@@ -3,6 +3,11 @@ package com.julen.clases.ui.components
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -235,21 +240,30 @@ fun GradientCard(
 
 @Composable
 private fun DecorativeCircles(modifier: Modifier) {
+    // Deriva lenta de los círculos para dar vida a la tarjeta sin distraer.
+    val drift by rememberInfiniteTransition(label = "circles").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "drift",
+    )
     Canvas(modifier) {
+        val dx = size.width * 0.06f * drift
+        val dy = size.height * 0.08f * drift
         drawCircle(
             color = Color.White.copy(alpha = 0.08f),
             radius = size.minDimension * 0.75f,
-            center = Offset(size.width * 1.02f, -size.height * 0.15f),
+            center = Offset(size.width * 1.02f - dx, -size.height * 0.15f + dy),
         )
         drawCircle(
             color = Color.White.copy(alpha = 0.06f),
             radius = size.minDimension * 0.45f,
-            center = Offset(size.width * 0.85f, size.height * 1.05f),
+            center = Offset(size.width * 0.85f + dx, size.height * 1.05f - dy),
         )
         drawCircle(
             color = Color.White.copy(alpha = 0.05f),
             radius = size.minDimension * 0.18f,
-            center = Offset(size.width * 0.08f, size.height * 0.92f),
+            center = Offset(size.width * 0.08f + dx * 1.5f, size.height * 0.92f - dy),
         )
     }
 }
